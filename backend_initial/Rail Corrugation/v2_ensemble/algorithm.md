@@ -17,10 +17,13 @@ car C` / `Shock of bearing in position P of car C`, for `P` in 1..8 and
 `C` in 1..8, interleaved (vib, shock, vib, shock, ...) so that all 16
 readings for one car appear together before the next car's.
 
-### Labels (for training only, not needed for prediction)
+### Labels (for retraining only, not needed to run predictions)
 
 `filename,label` — one row per training file, label one of `Normal`,
-`Side I`, `Side II`.
+`Side I`, `Side II`. The fitted ensemble is already shipped in
+`weights/` (see Section 2), so cloning this repo and running
+`run_pipeline.py --input <files>` needs none of this — no `Train/`, no
+`Train_Labels.csv`, nothing beyond the files to predict on.
 
 ### Output
 
@@ -95,6 +98,19 @@ own it is markedly weaker (see Section 3), but it makes decision
 boundaries the two tree models cannot (see Section 3's CatBoost/XGBoost
 asymmetry note) so it still moves the vote in cases the trees agree on
 incorrectly.
+
+### Step 3 — shipped weights, not a from-scratch fit every run
+
+The fitted ensemble (CatBoost's own `.cbm`, XGBoost's own `.json`, and
+the label encoder + scaler + logistic-regression coefficients in one
+`sklearn_components.joblib`) lives in `weights/` and is committed to the
+repo. By default `run_pipeline.py` loads these and predicts immediately
+— no training data, no `--data-dir`, no refitting. Passing `--retrain`
+together with `--data-dir` reruns the full fit described above (feature
+extraction on all 272 training files, the 5x5 CV self-check, then a
+final fit on all of them) and overwrites `weights/` with the result —
+needed only after changing `features.py` or `model.py`, or to verify the
+shipped weights still reproduce.
 
 ## 3. What was tried and did not work well
 

@@ -18,7 +18,9 @@ fold only.
 """
 
 from dataclasses import dataclass, field
+from pathlib import Path
 
+import joblib
 import numpy as np
 from catboost import CatBoostClassifier
 from sklearn.linear_model import LogisticRegression
@@ -29,6 +31,17 @@ CATBOOST_WEIGHT = 2
 XGBOOST_WEIGHT = 2
 LOGREG_WEIGHT = 1
 RANDOM_STATE = 42
+
+# Filenames a saved ensemble is split across: the two boosted models use
+# their own native formats (portable across library versions within a
+# major release), everything else (label encoder, scaler, logreg -- all
+# plain sklearn objects with no native serialization) goes in one joblib
+# file together.
+WEIGHTS_FILES = {
+    "catboost": "catboost.cbm",
+    "xgboost": "xgboost.json",
+    "sklearn": "sklearn_components.joblib",
+}
 
 
 def make_catboost() -> CatBoostClassifier:
@@ -84,3 +97,32 @@ class RailEnsemble:
         proba = self.predict_proba(X)
         idx = np.argmax(proba, axis=1)
         return self.label_encoder.inverse_transform(idx)
+
+    def save(self, weights_dir: Path) -> None:
+        """Serialize a fitted ensemble to `weights_dir` (created if needed)."""
+        weights_dir = Path(weights_dir)
+        weights_dir.mkdir(parents=True, exist_ok=True)
+        self.catboost.save_model(str(weights_dir / WEIGHTS_FILES["catboost"]))
+        self.xgboost.save_model(str(weights_dir / WEIGHTS_FILES["xgboost"]))
+        joblib.dump(
+            {"label_encoder": self.label_encoder, "scaler": self.scaler, "logreg": self.logreg},
+            weights_dir / WEIGHTS_FILES["sklearn"],
+        )
+
+    @staticmethod
+    def weights_exist(weights_dir: Path) -> bool:
+        weights_dir = Path(weights_dir)
+        return all((weights_dir / fn).exists() for fn in WEIGHTS_FILES.values())
+
+    @classmethod
+    def load(cls, weights_dir: Path) -> "RailEnsemble":
+        """Load a previously `save()`d ensemble -- no fitting, ready to predict."""
+        weights_dir = Path(weights_dir)
+        ensemble = cls()
+        ensemble.catboost.load_model(str(weights_dir / WEIGHTS_FILES["catboost"]))
+        ensemble.xgboost.load_model(str(weights_dir / WEIGHTS_FILES["xgboost"]))
+        components = joblib.load(weights_dir / WEIGHTS_FILES["sklearn"])
+        ensemble.label_encoder = components["label_encoder"]
+        ensemble.scaler = components["scaler"]
+        ensemble.logreg = components["logreg"]
+        return ensemble

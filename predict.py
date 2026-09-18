@@ -54,7 +54,7 @@ REPO_ROOT = Path(__file__).resolve().parent
 SUBSYSTEMS = {
     "Door":             {"pipeline_dir": "Door",            "version": "v2_rule-based", "output": "door_predictions.csv", "input_kind": "single_csv"},
     "ACV":              {"pipeline_dir": "ACV",              "version": "v2_rule-based", "output": "acv_predictions.csv",  "input_kind": "single_xlsx"},
-    "Rail_Corrugation": {"pipeline_dir": "Rail Corrugation", "version": "v2_rule-based", "output": "rail_predictions.csv", "input_kind": "dir"},
+    "Rail_Corrugation": {"pipeline_dir": "Rail Corrugation", "version": "v2_ensemble",   "output": "rail_predictions.csv", "input_kind": "dir"},
     "SHM":              {"pipeline_dir": "SHM",              "version": "v2_rule-based", "output": "shm_predictions.csv",  "input_kind": "dir"},
 }
 
@@ -76,8 +76,10 @@ def _is_junk(path: Path) -> bool:
     return "__MACOSX" in path.parts or path.name.startswith("._") or path.name == ".DS_Store"
 
 
-def find_subsystem_dir(root: Path, subsystem: str) -> Path | None:
+def find_subsystem_dir(root: Path | None, subsystem: str) -> Path | None:
     """Find a directory under `root` matching one of `subsystem`'s aliases (any depth, shallowest wins)."""
+    if root is None:
+        return None
     aliases = {_normalize(a) for a in NAME_ALIASES[subsystem]}
     candidates = [
         p for p in root.rglob("*")
@@ -101,7 +103,15 @@ def _descend_if_single_child(d: Path, glob_pattern: str, max_depth: int = 3) -> 
     return d
 
 
-def resolve_data_root(explicit: Path | None) -> Path:
+def resolve_data_root(explicit: Path | None) -> Path | None:
+    """
+    Best-effort only -- returns None (not a hard error) if nothing is found.
+    Not every subsystem needs training data to run (Rail Corrugation's
+    v2_ensemble ships pre-trained weights and works with no data root at
+    all); whether its absence is actually fatal is decided per-subsystem
+    in run_subsystem(), once each pipeline script has had a chance to say
+    whether it can proceed without it.
+    """
     if explicit is not None:
         return explicit.resolve()
     env = os.environ.get("NEBULA_DATA_ROOT")
@@ -115,11 +125,7 @@ def resolve_data_root(explicit: Path | None) -> Path:
     ]:
         if candidate.exists():
             return candidate
-    sys.exit(
-        "[ERROR] Could not locate the training-data root (needs ACV/, Door/, "
-        "Rail_Corrugation/, SHM/ subfolders, same layout as the competition's "
-        "02_Datasets/). Pass --data-root explicitly or set NEBULA_DATA_ROOT."
-    )
+    return None
 
 
 def resolve_input(subsystem_dir: Path, kind: str, subsystem: str) -> Path:
@@ -144,9 +150,12 @@ def run_subsystem(subsystem: str, cfg: dict, zip_root: Path, data_root: Path, ou
     if subsystem_input_dir is None:
         return None, "skipped -- no matching folder found in the zip"
 
+    # Training data is only strictly required by subsystems that don't ship
+    # pre-trained weights (Rail Corrugation's v2_ensemble does -- see its
+    # run_pipeline.py). So a missing --data-root match is NOT fatal here:
+    # just omit --data-dir and let that subsystem's own run_pipeline.py
+    # decide whether it can proceed (it errors clearly if it truly needs it).
     subsystem_data_dir = find_subsystem_dir(data_root, subsystem)
-    if subsystem_data_dir is None:
-        return False, f"FAILED -- training data not found under --data-root {data_root}"
 
     try:
         input_path = resolve_input(subsystem_input_dir, cfg["input_kind"], subsystem)
@@ -159,14 +168,13 @@ def run_subsystem(subsystem: str, cfg: dict, zip_root: Path, data_root: Path, ou
 
     output_path = (output_dir / cfg["output"]).resolve()
 
-    cmd = [
-        sys.executable, str(pipeline_script),
-        "--data-dir", str(subsystem_data_dir.resolve()),
-        "--input", str(input_path.resolve()),
-        "--output", str(output_path),
-    ]
+    cmd = [sys.executable, str(pipeline_script)]
+    if subsystem_data_dir is not None:
+        cmd += ["--data-dir", str(subsystem_data_dir.resolve())]
+    cmd += ["--input", str(input_path.resolve()), "--output", str(output_path)]
+
     print(f"\n{'=' * 70}\nRunning {subsystem}\n{'=' * 70}")
-    print(f"  data-dir : {subsystem_data_dir}")
+    print(f"  data-dir : {subsystem_data_dir if subsystem_data_dir else '(none found -- relying on pre-trained weights, if any)'}")
     print(f"  input    : {input_path}")
     print(f"  output   : {output_path}")
 
@@ -198,7 +206,7 @@ def main():
         sys.exit(f"[ERROR] Not a valid zip file: {args.zipfile}")
 
     data_root = resolve_data_root(args.data_root)
-    print(f"[INFO] Training-data root : {data_root}")
+    print(f"[INFO] Training-data root : {data_root if data_root else '(none found -- subsystems without pre-trained weights will fail)'}")
     print(f"[INFO] Output directory   : {args.output_dir.resolve()}")
 
     args.output_dir.mkdir(parents=True, exist_ok=True)
