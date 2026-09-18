@@ -28,7 +28,25 @@ this repo and running `run_pipeline.py --input <file>` needs neither of those fi
 Same schema as v2 — one row per predicted segment, `start_time,end_time,prediction`. No `file_id`,
 no `operation` column.
 
-## 2. How the algorithm works
+## 2. How this addresses the info kit's 3 pain points
+
+| # | Pain point | Status | Mechanism |
+|---|---|---|---|
+| 1 | *"Statistical thresholds set from scarce fault samples are hard to evaluate for reasonableness."* | **Addressed in v3** | Bootstrap confidence half-width per threshold (Section 3, "Confidence"), flagging any prediction close enough to the boundary that a different resample of the same 15/40 training examples could plausibly have called it the other way. |
+| 2 | *"Data distributions differ among doors; a uniform threshold causes false alarms and missed detections."* | **Addressed in v3** | Each threshold is expressed relative to a recalibratable local baseline (Section 3, "Classification"), not a bare constant — `--retrain` against a different door's own data shifts the boundary by that door's own offset. |
+| 3 | *"A live deployment must find cycle boundaries in a continuous stream before it can classify them."* | **Already solved in v2**, unchanged here | Timestamp-gap segmentation — see `v2_rule-based/algorithm.md`. Not touched in v3: it was already validated (perfect IoU-weighted F1 on Train, exact segment count on the real `Test.csv`), and neither pain point above bears on segmentation. |
+
+Issues 1 and 2 are the ones this version was built for; issue 3 is listed for completeness, not
+because anything here changes it.
+
+One explicit non-goal, worth stating plainly: none of this corrects any individual prediction
+v2 already made, including whichever one caused the real `Test.csv` score to come back 37/38
+instead of 38/38. v3 is verified to reproduce v2's predictions byte-for-byte on that file (Section
+3). A separate attempt to specifically correct that one prediction was built, tested against the
+real data, and found to trade one likely fix for several new, worse errors — see the project
+history for that experiment's findings; it was not kept, since it made things worse, not better.
+
+## 3. How the algorithm works
 
 ### Segmentation and feature extraction — unchanged from v2
 
@@ -45,13 +63,13 @@ adjusted_threshold = fixed_threshold + (local_baseline − train_baseline)
 ```
 
 where `train_baseline` is the median of that operation's Normal cycles in Train (specifically,
-the median of the *same* 20-cycle window used to seed `local_baseline` below — see Section 3 for
+the median of the *same* 20-cycle window used to seed `local_baseline` below — see Section 4 for
 why they have to be the same window), and `local_baseline` is the median of the most recent 20
 cycles this pipeline has classified Normal for that operation, seeded from Train's own history at
 calibration time.
 
 **Within a single run, `local_baseline` is frozen at its calibrated seed value** — it is not
-updated cycle-by-cycle as the pipeline classifies its own input (Section 3 explains why that was
+updated cycle-by-cycle as the pipeline classifies its own input (Section 4 explains why that was
 tried and rejected). It only changes when the pipeline is explicitly recalibrated (`--retrain
 --data-dir <a door's own labelled data>`), which reseeds it from that door's own recent Normal
 history.
@@ -60,7 +78,7 @@ This directly answers issue 2: whenever a door's own recent Normal cycles sit at
 current level than Train's door did, recalibrating there shifts the threshold by exactly that
 difference, rather than checking every door against Train's specific current level forever. And
 because `local_baseline` is defined to equal `train_baseline` exactly at calibration time (by
-construction — see Section 3), `adjusted_threshold` reduces to precisely v2's fixed constant on
+construction — see Section 4), `adjusted_threshold` reduces to precisely v2's fixed constant on
 this dataset, since Train's own door shows no measurable drift. **Verified**: v3 reproduces v2's
 predictions byte-for-byte on the real `Test.csv`.
 
@@ -80,7 +98,7 @@ weaker) kind of uncertainty than v2's out-of-range flag, which is kept unchanged
 means "nothing like this was ever seen in training"; low-confidence means "this was seen, but the
 boundary near it is itself shaky." A cycle can be flagged by either, both, or neither.
 
-## 3. What was tried and did not work well
+## 4. What was tried and did not work well
 
 **Online self-training within a single run** — updating `local_baseline`'s rolling window live,
 using every cycle the pipeline itself just classified Normal, as the stream was processed — was
@@ -92,7 +110,7 @@ adjusted threshold from 700.0 to ~712.0 mA and flipping one borderline segment
 no accuracy benefit to show for it, since that segment was already correctly classified by v2.
 Self-training on a model's own predictions within one inference pass is a known way to compound
 whatever the model is already slightly wrong about, and this was a concrete instance of exactly
-that, not just a theoretical concern. Replaced with the frozen-per-run design in Section 2:
+that, not just a theoretical concern. Replaced with the frozen-per-run design in Section 3:
 `local_baseline` only moves between runs, via an explicit `--retrain` a person chooses to trigger
 against a specific door's own data, never silently during inference.
 
