@@ -37,7 +37,7 @@ usable data are always placed last.
 ### Train data (for refreshing the margin comparison set only, not needed to predict)
 
 `Train/` and `Train_Labels.csv`, same format. The ranking rule itself
-(Section 2) has no fitted parameters — every constant is fixed in
+(Section 3) has no fitted parameters — every constant is fixed in
 `ranking.py` — so training data was never needed to rank, only to
 calibrate what counts as a "thin" top-vs-runner-up margin worth
 flagging, and that comparison set is already shipped in
@@ -45,7 +45,22 @@ flagging, and that comparison set is already shipped in
 `run_pipeline.py --input <file>` needs nothing beyond the file to
 predict on.
 
-## 2. How the algorithm works
+**Verified**: run with no `--data-dir` at all (and no `Train/` or
+`Train_Labels.csv` on disk), `run_pipeline.py --input acv_test_case.xlsx`
+loads `artifacts/train_margins.json`, ranks immediately, and reproduces
+the same result as a freshly-recalibrated run —
+`01|08|04|03|02|07|05|06`, margin 225.770, flagged as typical. Training
+data is only ever read when `--retrain --data-dir <dir>` is passed
+explicitly.
+
+## 2. How this addresses the info kit's 2 pain points
+
+| # | Pain point | Status | Mechanism |
+|---|---|---|---|
+| 1 | *"Only a small number of documented fault cases exist, limiting how much a data-driven model can learn from typical failure signatures compared with the other subsystems' datasets."* | **Partially addressed** | Every constant (`k`, half-life, window, `TIE_EPSILON`) comes from SPC theory or explicit sensitivity testing (Section 4), not fitted from the 6 training cases — the algorithm never needed abundant data to learn a failure signature in the first place. What's missing: no bootstrap-style confidence quantification on the calibration itself. `margin_report()` compares a new case's margin against only 6 observed training margins, with no measure of how reliable that comparison is at this sample size — unlike the Door subsystem's `v3_adaptive`, which bootstrap-resamples its own scarce training set to get an explicit confidence half-width. |
+| 2 | *"Diagnosis must distinguish genuine leakage-induced anomalies from normal cyclic variation in ACV control across the 8 cars of a train, and correctly localise the fault to the affected car — not merely detect that a fault exists somewhere on the train."* | **Partially addressed** | Localization is fully solved: the entire output is a per-car ranking, not a fault/no-fault flag, validated at 100% (the correct car ranked 1st in all 6 training cases). Distinguishing genuine anomaly from normal cyclic variation is handled by design — cross-sectional median-differencing cancels shared/cyclic effects across the fleet, and CUSUM's slack (`k=0.5σ`) absorbs routine jitter, so only a sustained, one-directional deviation accumulates. What's not solved: Section 4 documents, explicitly, that CUSUM cannot distinguish an actual refrigerant leak from any other cause of a sustained, non-random per-car offset (physical position on the train, occupancy) using temperature alone — the algorithm ranks by "most anomalous relative to its peers," not by confirmed leak causation. |
+
+## 3. How the algorithm works
 
 ### Step 1 — per-timestep gap from the fleet
 
@@ -119,7 +134,7 @@ recomputes the margins from the 6 labelled cases, overwriting
 `artifacts/` with the result — needed only after changing `ranking.py`,
 or to verify the shipped margins still reproduce.
 
-## 3. What was tried and did not work well
+## 4. What was tried and did not work well
 
 **Fixed-window features (whole-file mean deviation, or a fixed trailing
 fraction of the file) instead of CUSUM.** Each gets every training
