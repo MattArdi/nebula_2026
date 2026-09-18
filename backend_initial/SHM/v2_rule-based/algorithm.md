@@ -12,9 +12,12 @@ in, one number comes out, from a single calibrated physical formula.
 A single-column CSV with no header: one raw dynamic-stress reading per
 row. Every file (training and test alike) has the same row count.
 
-### Labels (for calibration only, not needed for prediction)
+### Labels (for refitting the calibration constant only, not needed to predict)
 
-`filename,damage` — one row per training file.
+`filename,damage` — one row per training file. The fitted constant `C`
+is already shipped in `artifacts/calibration.json` (see Section 2), so
+cloning this repo and running `run_pipeline.py --input <files>` needs
+nothing beyond the files to predict on.
 
 ### Output
 
@@ -59,6 +62,17 @@ damage_predicted = proxy / C
 
 One fitted parameter, total. There is no feature vector, no model
 architecture, and no training loop beyond that single division.
+
+### Shipped calibration, not a from-scratch fit every run
+
+`C` (plus the fixed exponent `m` and the training proxy range used for
+extrapolation flagging) is committed to the repo in
+`artifacts/calibration.json`. By default `run_pipeline.py` loads this
+and predicts immediately — no training data, no `--data-dir`. Passing
+`--retrain` together with `--data-dir` reruns the leave-one-out
+self-check and refits `C` on all 64 training files, overwriting
+`artifacts/` with the result — needed only after changing `physics.py`
+or `model.py`, or to verify the shipped constant still reproduces.
 
 ## 3. What was tried and did not work well
 

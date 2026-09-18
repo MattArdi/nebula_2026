@@ -23,6 +23,7 @@ trusted:
    which is a materially different and weaker kind of confidence.
 """
 
+import json
 from pathlib import Path
 
 import numpy as np
@@ -191,6 +192,34 @@ def build_train_ranges(data_dir: Path) -> pd.DataFrame:
 
     ranges = feat_df.groupby("operation")[DECISION_FEATURES].agg(["min", "max"])
     return ranges
+
+
+def save_train_ranges(path: Path, ranges: pd.DataFrame) -> None:
+    """Serialize the per-operation feature ranges flag_out_of_range() checks
+    against -- everything a fresh run_pipeline.py needs to flag
+    extrapolations without ever seeing training data again."""
+    path = Path(path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    nested = {
+        op: {feat: [float(ranges.loc[op, (feat, "min")]), float(ranges.loc[op, (feat, "max")])]
+             for feat in DECISION_FEATURES}
+        for op in ranges.index
+    }
+    path.write_text(json.dumps(nested, indent=2))
+
+
+def load_train_ranges(path: Path) -> pd.DataFrame:
+    nested = json.loads(Path(path).read_text())
+    rows = {}
+    for op, feats in nested.items():
+        row = {}
+        for feat, (lo, hi) in feats.items():
+            row[(feat, "min")] = lo
+            row[(feat, "max")] = hi
+        rows[op] = row
+    df = pd.DataFrame.from_dict(rows, orient="index")
+    df.columns = pd.MultiIndex.from_tuples(df.columns)
+    return df
 
 
 def flag_out_of_range(pred_df: pd.DataFrame, ranges: pd.DataFrame) -> pd.DataFrame:

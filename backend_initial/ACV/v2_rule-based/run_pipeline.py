@@ -1,29 +1,41 @@
 """
 ACV Subsystem (rule-based) — Single-Command Pipeline
 =========================================================
-Run this one file to go from raw case files to a submission-ready
-predictions file, with diagnostics printed along the way:
+Run this one file to go from a raw case file to a submission-ready
+predictions file:
 
-    python run_pipeline.py --data-dir /path/to/ACV
+    python run_pipeline.py --input /path/to/acv_test_case.xlsx
 
-That path must contain Train/, Train_Labels.csv, and (by default)
-Test/acv_test_case.xlsx. Everything else is optional:
+By default this LOADS the training margins already committed in
+artifacts/train_margins.json (used only to flag an unusually thin
+top-vs-runner-up margin) and ranks immediately -- no --data-dir, no
+training data. The ranking rule itself (schema.py + ranking.py) has no
+fitted parameters at all -- every constant it uses (K_SLACK,
+HALF_LIFE_ROWS, TIE_EPSILON, ...) is fixed in ranking.py -- so training
+data was never needed to rank, only to calibrate what counts as a
+"thin" margin worth flagging.
 
-    python run_pipeline.py --data-dir /path/to/ACV \\
-        --input /path/to/ACV/Test/acv_test_case.xlsx \\
-        --output acv_predictions.csv
+To refresh that comparison set (e.g. after changing ranking.py, or to
+verify the shipped margins still reproduce), pass --retrain together
+with --data-dir:
 
-What it does, in order
------------------------
+    python run_pipeline.py --retrain --data-dir /path/to/ACV \\
+        --input /path/to/ACV/Test/acv_test_case.xlsx --output acv_predictions.csv
+
+That path must contain Train/ and Train_Labels.csv. Retraining does, in
+order:
 1. Runs the FULL pipeline (schema.py + ranking.py -- no shortcuts) on
    every labelled Train case and scores it against Train_Labels.csv with
    the real competition metric (linear rank-decay).
-2. Runs the same pipeline on --input (acv_test_case.xlsx by default).
-3. Reports the top-pick margin for that file against the spread of
-   margins actually observed in training, flagging an unusually close call.
-4. Writes acv_predictions.csv in the exact submission schema: file_id,
-   ranked_cars (pipe-separated, car identifiers exactly as they appear in
-   the file's own headers).
+2. Saves the resulting per-case margins to artifacts/ -- OVERWRITING it
+   with the result -- so future default runs pick up the refreshed
+   comparison set.
+
+Either way, the final step is the same: ranks the target file's cars,
+reports the top pick's margin against the training comparison set, and
+writes acv_predictions.csv in the exact submission schema: file_id,
+ranked_cars (pipe-separated, car identifiers exactly as they appear in
+the file's own headers).
 """
 
 import argparse
@@ -36,22 +48,35 @@ sys.path.insert(0, str(Path(__file__).parent))
 import diagnostics
 import ranking
 
+DEFAULT_ARTIFACTS_PATH = Path(__file__).parent / "artifacts" / "train_margins.json"
+
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="ACV subsystem — rule-based CUSUM ranking, one-command run."
-    )
-    parser.add_argument(
-        "--data-dir", type=Path, required=True,
-        help="Directory containing Train/, Train_Labels.csv, and Test/.",
+        description="ACV subsystem — rule-based CUSUM ranking, one-command run.",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
     )
     parser.add_argument(
         "--input", type=Path, default=None,
-        help="Case file to predict on. Defaults to <data-dir>/Test/acv_test_case.xlsx.",
+        help="Case file to predict on. Required unless --data-dir sets a default via Test/.",
     )
     parser.add_argument(
         "--output", type=Path, default=Path("acv_predictions.csv"),
         help="Where to write the submission CSV (default: ./acv_predictions.csv).",
+    )
+    parser.add_argument(
+        "--data-dir", type=Path, default=None,
+        help="Directory containing Train/ and Train_Labels.csv. Only needed with --retrain "
+             "(or if --input is omitted, to default it to <data-dir>/Test/acv_test_case.xlsx).",
+    )
+    parser.add_argument(
+        "--artifacts-path", type=Path, default=None,
+        help=f"Where the training margins are loaded from / saved to (default: {DEFAULT_ARTIFACTS_PATH}).",
+    )
+    parser.add_argument(
+        "--retrain", action="store_true",
+        help="Recompute training margins from --data-dir instead of loading the shipped set, and "
+             "overwrite --artifacts-path with the result. Requires --data-dir.",
     )
     return parser.parse_args()
 
@@ -62,20 +87,11 @@ def print_header(text: str) -> None:
     print("=" * 70)
 
 
-def main() -> None:
-    args = parse_args()
-    data_dir = args.data_dir.resolve()
-    input_path = (args.input or data_dir / "Test" / "acv_test_case.xlsx").resolve()
-
+def refresh_train_margins(data_dir: Path, artifacts_path: Path) -> pd.Series:
     if not (data_dir / "Train_Labels.csv").exists():
         sys.exit(f"[ERROR] Train_Labels.csv not found in {data_dir}")
-    if not input_path.exists():
-        sys.exit(f"[ERROR] Input file not found: {input_path}")
 
-    # -----------------------------------------------------------------
-    # 1. Self-check: full pipeline vs. Train_Labels.csv, real metric
-    # -----------------------------------------------------------------
-    print_header("STEP 1/3 — Self-check: full pipeline vs. Train_Labels.csv")
+    print_header("STEP 1/2 — Self-check: full pipeline vs. Train_Labels.csv")
     check_df = diagnostics.self_check_on_train(data_dir)
     print(check_df.to_string(index=False))
     print(f"\n  Mean rank-decay score: {check_df['score'].mean():.4f}")
@@ -85,20 +101,53 @@ def main() -> None:
 
     train_margins = check_df["margin"].dropna()
 
-    # -----------------------------------------------------------------
-    # 2. Run the pipeline on the target input file
-    # -----------------------------------------------------------------
-    print_header(f"STEP 2/3 — Running pipeline on {input_path.name}")
+    print_header("STEP 2/2 — Saving training margins")
+    diagnostics.save_train_margins(artifacts_path, train_margins)
+    print(f"  Saved {len(train_margins)} margin(s) to {artifacts_path}")
+    return train_margins
+
+
+def main() -> None:
+    args = parse_args()
+    artifacts_path = (args.artifacts_path or DEFAULT_ARTIFACTS_PATH).resolve()
+    data_dir = args.data_dir.resolve() if args.data_dir else None
+
+    if args.retrain:
+        if data_dir is None:
+            sys.exit("[ERROR] --retrain requires --data-dir.")
+        train_margins = refresh_train_margins(data_dir, artifacts_path)
+    elif artifacts_path.exists():
+        print_header(f"Loading training margins from {artifacts_path}")
+        print("  (pass --retrain --data-dir <dir> to refresh instead)")
+        train_margins = diagnostics.load_train_margins(artifacts_path)
+    elif data_dir is not None:
+        print_header(f"No saved margins at {artifacts_path} — computing from --data-dir")
+        train_margins = refresh_train_margins(data_dir, artifacts_path)
+    else:
+        sys.exit(
+            f"[ERROR] No saved training margins found at {artifacts_path}, and no --data-dir "
+            f"given to compute them from. Either point --artifacts-path at an existing "
+            f"train_margins.json, or pass --data-dir (add --retrain to force refreshing even if "
+            f"margins already exist)."
+        )
+
+    input_path = args.input
+    if input_path is None:
+        if data_dir is None:
+            sys.exit("[ERROR] --input is required when --data-dir is not given.")
+        input_path = data_dir / "Test" / "acv_test_case.xlsx"
+    input_path = input_path.resolve()
+    if not input_path.exists():
+        sys.exit(f"[ERROR] Input file not found: {input_path}")
+
+    print_header(f"Ranking cars in {input_path.name}")
     df_input = pd.read_excel(input_path)
     result = ranking.rank_cars(df_input)
     print(f"  Ranked cars (most to least suspicious): {' | '.join(result['ranked'])}")
     if result["excluded"]:
         print(f"  [INFO] Car(s) with no usable telemetry, ranked last: {result['excluded']}")
 
-    # -----------------------------------------------------------------
-    # 3. Margin diagnostics
-    # -----------------------------------------------------------------
-    print_header("STEP 3/3 — Confidence check (margin vs. training)")
+    print_header("Confidence check (margin vs. training)")
     mr = diagnostics.margin_report(result, train_margins)
     if mr["flagged"]:
         print(f"  [WARN] Top pick's margin ({mr['margin']:.3f}) is thinner than usual — {mr['reason']}")
@@ -107,9 +156,6 @@ def main() -> None:
     else:
         print(f"  Margin looks typical: {mr['reason']} (margin={mr['margin']:.3f}).")
 
-    # -----------------------------------------------------------------
-    # Write submission file
-    # -----------------------------------------------------------------
     out_df = pd.DataFrame([{
         "file_id": input_path.name,
         "ranked_cars": "|".join(result["ranked"]),

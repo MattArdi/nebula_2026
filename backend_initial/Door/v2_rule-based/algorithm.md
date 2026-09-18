@@ -24,6 +24,15 @@ start_time,end_time,prediction
 
 No `file_id` column and no `operation` column.
 
+### Train data (for refreshing the OOD comparison set only, not needed to predict)
+
+`Train.csv` and `Train_Segments_Answer.csv`, same format. The two
+classification thresholds are fixed constants (see Section 2) that don't
+need training data to use — the per-operation feature ranges used for
+out-of-range flagging are already shipped in `artifacts/train_ranges.json`,
+so cloning this repo and running `run_pipeline.py --input <file>` needs
+nothing beyond the file to predict on.
+
 ## 2. How the algorithm works
 
 ### Step 1 — segmentation
@@ -77,6 +86,17 @@ These two thresholds, plus the two guardrail row-count bounds, are the
 only constants the algorithm uses. There is no model fit and no ranking
 or tiebreak step — each segment is assigned exactly one label
 independently of every other segment.
+
+### Shipped comparison set, not a from-scratch computation every run
+
+The per-operation feature ranges `flag_out_of_range()` checks against
+(`artifacts/train_ranges.json`) are committed to the repo. By default
+`run_pipeline.py` loads this and predicts immediately — no training
+data, no `--data-dir`. Passing `--retrain` together with `--data-dir`
+reruns the self-check against `Train_Segments_Answer.csv` and rebuilds
+the ranges from the 110 labelled cycles, overwriting `artifacts/` with
+the result — needed only after changing `rules.py`, or to verify the
+shipped ranges still reproduce.
 
 ## 3. What was tried and did not work well
 

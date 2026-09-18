@@ -2,33 +2,42 @@
 SHM Subsystem (rule-based) — Single-Command Pipeline
 =========================================================
 Run this one file to go from raw stress CSVs to a submission-ready
-predictions file, with diagnostics printed along the way:
+predictions file:
 
-    python run_pipeline.py --data-dir /path/to/SHM
+    python run_pipeline.py --input /path/to/Test
 
-That path must contain Train/, Train_Labels.csv, and (by default) Test/.
-Everything else is optional:
-
-    python run_pipeline.py --data-dir /path/to/SHM \\
-        --input /path/to/SHM/Test \\
-        --output shm_predictions.csv
+By default this LOADS the pre-fitted calibration constant already
+committed in artifacts/calibration.json (C, the fixed exponent m, and
+the training proxy range used for extrapolation flagging) and predicts
+immediately -- no --data-dir, no training data, no refitting. This is
+what makes "clone the repo, run on real data" work with nothing else on
+disk.
 
 --input accepts either a directory (every *.csv inside it is predicted,
 one row each -- the normal case, since SHM's Test/ holds 16 separate
 files) or a single CSV file.
 
-What it does, in order
------------------------
+To refit instead of loading the shipped calibration (e.g. after changing
+physics.py or model.py, or to verify the shipped constant still
+reproduces), pass --retrain together with --data-dir:
+
+    python run_pipeline.py --retrain --data-dir /path/to/SHM \\
+        --input /path/to/SHM/Test --output shm_predictions.csv
+
+That path must contain Train/ and Train_Labels.csv. Retraining does, in
+order:
 1. Runs the full pipeline (physics.py + model.py) through leave-one-out
    cross-validation against Train_Labels.csv, scored with the real
-   competition metric (max(0, 1-MAPE)). This is the one trustworthy
-   estimate of how the pipeline performs on unseen files.
-2. Fits the final calibration constant C on all 64 training files.
-3. Predicts damage for every file under --input.
-4. Flags any prediction whose Miner's-rule proxy falls outside the range
-   Train ever demonstrated -- an extrapolation, not an interpolation.
-5. Writes shm_predictions.csv in the exact submission schema: file_id,
-   prediction.
+   competition metric (max(0, 1-MAPE)) -- the one trustworthy estimate
+   of how the pipeline performs on unseen files.
+2. Refits C on all 64 training files and OVERWRITES artifacts/ with the
+   result -- --retrain is destructive to the shipped calibration by
+   design, so future default runs pick up the refitted constant.
+
+Either way, the final step is the same: predicts on every file under
+--input, flags any prediction whose Miner's-rule proxy falls outside the
+range Train ever demonstrated, and writes shm_predictions.csv in the
+exact submission schema: file_id, prediction.
 """
 
 import argparse
@@ -42,22 +51,35 @@ import diagnostics
 import model as model_mod
 import physics
 
+DEFAULT_ARTIFACTS_PATH = Path(__file__).parent / "artifacts" / "calibration.json"
+
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="SHM subsystem — rule-based Miner's-rule damage prediction, one-command run."
-    )
-    parser.add_argument(
-        "--data-dir", type=Path, required=True,
-        help="Directory containing Train/, Train_Labels.csv, and Test/.",
+        description="SHM subsystem — rule-based Miner's-rule damage prediction, one-command run.",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
     )
     parser.add_argument(
         "--input", type=Path, default=None,
-        help="File or directory to predict on. Defaults to <data-dir>/Test/.",
+        help="File or directory to predict on. Required unless --data-dir sets a default via Test/.",
     )
     parser.add_argument(
         "--output", type=Path, default=Path("shm_predictions.csv"),
         help="Where to write the submission CSV (default: ./shm_predictions.csv).",
+    )
+    parser.add_argument(
+        "--data-dir", type=Path, default=None,
+        help="Directory containing Train/ and Train_Labels.csv. Only needed with --retrain "
+             "(or if --input is omitted, to default it to <data-dir>/Test).",
+    )
+    parser.add_argument(
+        "--artifacts-path", type=Path, default=None,
+        help=f"Where the calibration JSON is loaded from / saved to (default: {DEFAULT_ARTIFACTS_PATH}).",
+    )
+    parser.add_argument(
+        "--retrain", action="store_true",
+        help="Refit C from --data-dir instead of loading the shipped calibration, and overwrite "
+             "--artifacts-path with the result. Requires --data-dir.",
     )
     return parser.parse_args()
 
@@ -68,6 +90,28 @@ def print_header(text: str) -> None:
     print("=" * 70)
 
 
+def refit_calibration(data_dir: Path, artifacts_path: Path) -> dict:
+    if not (data_dir / "Train_Labels.csv").exists():
+        sys.exit(f"[ERROR] Train_Labels.csv not found in {data_dir}")
+
+    proxy_df = physics.compute_train_proxies(data_dir)
+
+    print_header("STEP 1/2 — Self-check: leave-one-out CV vs. Train_Labels.csv")
+    loo = diagnostics.self_check_loo(proxy_df)
+    print(loo.sort_values("rel_err_pct", ascending=False).head(10).to_string(index=False))
+    print(f"\n  Mean LOO score (max(0, 1-MAPE)): {loo.attrs['mean_score']:.4f}")
+
+    print_header("STEP 2/2 — Fitting calibration constant C on all Train files")
+    C = model_mod.fit_calibration_constant(proxy_df)
+    train_range = diagnostics.build_train_proxy_range(proxy_df)
+    print(f"  C = {C:.6e}   (m = {physics.M_EXPONENT})")
+    print(f"  Train proxy range: [{train_range[0]:.3e}, {train_range[1]:.3e}]")
+
+    model_mod.save_calibration(artifacts_path, C, physics.M_EXPONENT, train_range)
+    print(f"  Saved calibration to {artifacts_path}")
+    return {"C": C, "m": physics.M_EXPONENT, "train_proxy_min": train_range[0], "train_proxy_max": train_range[1]}
+
+
 def resolve_input_files(input_path: Path) -> list[Path]:
     if input_path.is_dir():
         return sorted(input_path.glob("*.csv"))
@@ -76,69 +120,61 @@ def resolve_input_files(input_path: Path) -> list[Path]:
 
 def main() -> None:
     args = parse_args()
-    data_dir = args.data_dir.resolve()
-    input_path = (args.input or data_dir / "Test").resolve()
+    artifacts_path = (args.artifacts_path or DEFAULT_ARTIFACTS_PATH).resolve()
+    data_dir = args.data_dir.resolve() if args.data_dir else None
 
-    if not (data_dir / "Train_Labels.csv").exists():
-        sys.exit(f"[ERROR] Train_Labels.csv not found in {data_dir}")
+    if args.retrain:
+        if data_dir is None:
+            sys.exit("[ERROR] --retrain requires --data-dir.")
+        calib = refit_calibration(data_dir, artifacts_path)
+    elif artifacts_path.exists():
+        print_header(f"Loading pre-fitted calibration from {artifacts_path}")
+        print("  (pass --retrain --data-dir <dir> to refit instead)")
+        calib = model_mod.load_calibration(artifacts_path)
+        print(f"  C = {calib['C']:.6e}   (m = {calib['m']})")
+    elif data_dir is not None:
+        print_header(f"No saved calibration at {artifacts_path} — fitting from --data-dir")
+        calib = refit_calibration(data_dir, artifacts_path)
+    else:
+        sys.exit(
+            f"[ERROR] No saved calibration found at {artifacts_path}, and no --data-dir given to "
+            f"fit from. Either point --artifacts-path at an existing calibration.json, or pass "
+            f"--data-dir (add --retrain to force refitting even if a calibration already exists)."
+        )
+
+    input_path = args.input
+    if input_path is None:
+        if data_dir is None:
+            sys.exit("[ERROR] --input is required when --data-dir is not given.")
+        input_path = data_dir / "Test"
+    input_path = input_path.resolve()
     if not input_path.exists():
         sys.exit(f"[ERROR] Input path not found: {input_path}")
 
-    # -----------------------------------------------------------------
-    # Compute rainflow proxies for all Train files ONCE, shared by both
-    # the self-check and the final calibration fit below (rainflow
-    # counting is the only real computational cost in this pipeline, so
-    # this halves total runtime versus recomputing it twice).
-    # -----------------------------------------------------------------
-    proxy_df = physics.compute_train_proxies(data_dir)
-
-    # -----------------------------------------------------------------
-    # 1. Self-check: leave-one-out CV against Train_Labels.csv
-    # -----------------------------------------------------------------
-    print_header("STEP 1/4 — Self-check: leave-one-out CV vs. Train_Labels.csv")
-    loo = diagnostics.self_check_loo(proxy_df)
-    print(loo.sort_values("rel_err_pct", ascending=False).head(10).to_string(index=False))
-    print(f"\n  Mean LOO score (max(0, 1-MAPE)): {loo.attrs['mean_score']:.4f}")
-
-    # -----------------------------------------------------------------
-    # 2. Fit final calibration constant on all training data
-    # -----------------------------------------------------------------
-    print_header("STEP 2/4 — Fitting calibration constant C on all Train files")
-    C = model_mod.fit_calibration_constant(proxy_df)
-    print(f"  C = {C:.6e}   (m = {physics.M_EXPONENT})")
-    train_range = diagnostics.build_train_proxy_range(proxy_df)
-    print(f"  Train proxy range: [{train_range[0]:.3e}, {train_range[1]:.3e}]")
-
-    # -----------------------------------------------------------------
-    # 3. Predict on the target input file(s)
-    # -----------------------------------------------------------------
-    print_header(f"STEP 3/4 — Predicting on {input_path}")
+    print_header(f"Predicting on {input_path}")
     files = resolve_input_files(input_path)
+    if not files:
+        sys.exit(f"[ERROR] No .csv files found under {input_path}")
+
+    train_range = (calib["train_proxy_min"], calib["train_proxy_max"])
     results = []
     for f in files:
         x = physics.load_stress_series(f)
-        proxy = physics.miner_proxy(x)
-        pred = proxy / C
+        proxy = physics.miner_proxy(x, calib["m"])
+        pred = proxy / calib["C"]
         flag = diagnostics.flag_extrapolation(proxy, train_range)
         results.append({"file_id": f.name, "prediction": pred, **flag})
     pred_df = pd.DataFrame(results)
     print(pred_df[["file_id", "prediction"]].to_string(index=False))
 
-    # -----------------------------------------------------------------
-    # 4. Extrapolation diagnostics
-    # -----------------------------------------------------------------
-    print_header("STEP 4/4 — Extrapolation check")
     flagged = pred_df[pred_df["flagged"]]
     if flagged.empty:
-        print("  No prediction's proxy falls outside Train's demonstrated range.")
+        print("\n  No prediction's proxy falls outside Train's demonstrated range.")
     else:
-        print(f"  [WARN] {len(flagged)}/{len(pred_df)} file(s) flagged:")
+        print(f"\n  [WARN] {len(flagged)}/{len(pred_df)} file(s) flagged:")
         for _, row in flagged.iterrows():
             print(f"    {row['file_id']}: {row['reason']}")
 
-    # -----------------------------------------------------------------
-    # Write submission file
-    # -----------------------------------------------------------------
     out_df = pred_df[["file_id", "prediction"]]
     out_df.to_csv(args.output, index=False)
     print_header("DONE")

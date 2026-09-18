@@ -34,6 +34,17 @@ acv_test_case.xlsx,01|08|04|03|02|07|05|06
 pipe-separated, using each car's own header identifier. Cars with no
 usable data are always placed last.
 
+### Train data (for refreshing the margin comparison set only, not needed to predict)
+
+`Train/` and `Train_Labels.csv`, same format. The ranking rule itself
+(Section 2) has no fitted parameters — every constant is fixed in
+`ranking.py` — so training data was never needed to rank, only to
+calibrate what counts as a "thin" top-vs-runner-up margin worth
+flagging, and that comparison set is already shipped in
+`artifacts/train_margins.json`. Cloning this repo and running
+`run_pipeline.py --input <file>` needs nothing beyond the file to
+predict on.
+
 ## 2. How the algorithm works
 
 ### Step 1 — per-timestep gap from the fleet
@@ -96,6 +107,17 @@ Full tiebreak order, applied only within a near-tie cluster:
 
 Cars with no usable data are appended after every data-bearing car,
 sorted by identifier.
+
+### Shipped comparison set, not a from-scratch computation every run
+
+The training margins `margin_report()` compares a new file's top-pick
+margin against (`artifacts/train_margins.json`) are committed to the
+repo. By default `run_pipeline.py` loads this and ranks immediately —
+no training data, no `--data-dir`. Passing `--retrain` together with
+`--data-dir` reruns the self-check against `Train_Labels.csv` and
+recomputes the margins from the 6 labelled cases, overwriting
+`artifacts/` with the result — needed only after changing `ranking.py`,
+or to verify the shipped margins still reproduce.
 
 ## 3. What was tried and did not work well
 

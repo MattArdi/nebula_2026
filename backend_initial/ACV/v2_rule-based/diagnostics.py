@@ -17,6 +17,7 @@ Two checks, run before a submission is trusted:
    ranked list.
 """
 
+import json
 from pathlib import Path
 
 import pandas as pd
@@ -62,6 +63,19 @@ def self_check_on_train(data_dir: Path) -> pd.DataFrame:
             "margin": result["margin"], "n_excluded": len(result["excluded"]), "note": "",
         })
     return pd.DataFrame(rows)
+
+
+def save_train_margins(path: Path, train_margins: pd.Series) -> None:
+    """Serialize the training margins margin_report() compares against --
+    everything a fresh run_pipeline.py needs to flag thin margins without
+    ever seeing training data again."""
+    path = Path(path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps({"train_margins": train_margins.tolist()}, indent=2))
+
+
+def load_train_margins(path: Path) -> pd.Series:
+    return pd.Series(json.loads(Path(path).read_text())["train_margins"])
 
 
 def margin_report(result: dict, train_margins: pd.Series) -> dict:
