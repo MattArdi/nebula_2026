@@ -2,3 +2,5 @@
 __pycache__/
 catboost_info/
 *_predictions.csv
+# Except deliberately-committed submission snapshots under predictions/.
+!predictions/**/*_predictions.csv
