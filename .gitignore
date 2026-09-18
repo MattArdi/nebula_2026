@@ -1,2 +1,4 @@
 .claude/worktrees/
 __pycache__/
+catboost_info/
+*_predictions.csv
