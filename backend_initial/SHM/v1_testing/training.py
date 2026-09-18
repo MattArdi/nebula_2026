@@ -307,7 +307,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--data-dir",
         type=Path,
-        default=Path(__file__).parent / "../../02_Datasets/SHM",
+        default=Path(__file__).parent / "../../../02_Datasets/SHM",
         help="Path to SHM dataset directory (must contain Train/ and Train_Labels.csv).",
     )
     parser.add_argument(

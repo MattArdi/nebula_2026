@@ -304,7 +304,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--data-dir",
         type=Path,
-        default=Path(__file__).parent / "../../02_Datasets/Rail_Corrugation",
+        default=Path(__file__).parent / "../../../02_Datasets/Rail_Corrugation",
         help="Path to Rail_Corrugation dataset directory.",
     )
     parser.add_argument(

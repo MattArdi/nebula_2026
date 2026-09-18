@@ -237,7 +237,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--data-dir",
         type=Path,
-        default=Path(__file__).parent / "../../02_Datasets/ACV",
+        default=Path(__file__).parent / "../../../02_Datasets/ACV",
         help="Path to the ACV dataset directory (must contain Train/ and Train_Labels.csv).",
     )
     parser.add_argument(

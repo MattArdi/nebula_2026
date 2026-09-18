@@ -360,7 +360,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--data-dir",
         type=Path,
-        default=Path(__file__).parent / "../../02_Datasets/Door",
+        default=Path(__file__).parent / "../../../02_Datasets/Door",
         help="Path to Door dataset directory (must contain Train.csv, Test.csv, "
              "Train_Segments_Answer.csv).",
     )
