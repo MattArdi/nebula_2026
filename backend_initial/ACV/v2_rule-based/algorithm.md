@@ -45,6 +45,14 @@ flagging, and that comparison set is already shipped in
 `run_pipeline.py --input <file>` needs nothing beyond the file to
 predict on.
 
+**Verified**: run with no `--data-dir` at all (and no `Train/` or
+`Train_Labels.csv` on disk), `run_pipeline.py --input acv_test_case.xlsx`
+loads `artifacts/train_margins.json`, ranks immediately, and reproduces
+the same result as a freshly-recalibrated run —
+`01|08|04|03|02|07|05|06`, margin 225.770, flagged as typical. Training
+data is only ever read when `--retrain --data-dir <dir>` is passed
+explicitly.
+
 ## 2. How the algorithm works
 
 ### Step 1 — per-timestep gap from the fleet
