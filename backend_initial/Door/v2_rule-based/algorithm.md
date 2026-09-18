@@ -1,9 +1,7 @@
 # Door Subsystem — Rule-Based Segmentation & Classification Algorithm
 
 Door is a **segmentation + binary classification** task (find each door
-cycle in a continuous stream, label it Normal or Abnormal resistance), not
-a ranking task — there is no CUSUM and no "which of several candidates"
-step here, unlike the ACV subsystem.
+cycle in a continuous stream, label it Normal or Abnormal resistance),.
 
 ## 1. Required data input and format
 
