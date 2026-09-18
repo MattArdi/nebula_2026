@@ -21,7 +21,7 @@ readings for one car appear together before the next car's.
 
 `filename,label` — one row per training file, label one of `Normal`,
 `Side I`, `Side II`. The fitted ensemble is already shipped in
-`weights/` (see Section 2), so cloning this repo and running
+`weights/` (see Section 3), so cloning this repo and running
 `run_pipeline.py --input <files>` needs none of this — no `Train/`, no
 `Train_Labels.csv`, nothing beyond the files to predict on.
 
@@ -36,9 +36,17 @@ Test13.csv,Side II
 Test22.csv,Side I
 ```
 
-## 2. How the algorithm works
+## 2. How this addresses the info kit's 3 pain points
 
-### Step 1 — feature extraction (41 features per file)
+| # | Pain point | Status | Mechanism |
+|---|---|---|---|
+| 1 | *"The corrugation formation mechanism is influenced by many confounding factors (sleeper spacing, bogie natural frequencies, curve geometry, track elasticity), so simple threshold-based detection on raw vibration amplitude is unreliable — the characteristic signature must be separated from normal speed- and ballast-dependent vibration."* | **Partially addressed** | Not a raw-amplitude threshold at all — a 41-feature statistical ensemble. Speed confound: directly handled, every RMS feature has a speed-normalized variant (Section 3.1). Bogie natural frequency: **not represented** — resonance is inherently a frequency-domain phenomenon, and the shipped feature set has zero frequency-domain features (the pre-existing `v1_testing/features.py` did extract FFT energy bands for this; that capability was dropped when this 41-feature time-domain set was built, and no head-to-head test of the two ever ran). Sleeper spacing / curve geometry / track elasticity: **not addressable from this data at all** — the raw files carry only a speed pulse and 128 vibration/shock channels, no positional or track metadata. A dataset ceiling, not a modeling gap. |
+| 2 | *"Side I and Side II rails must be judged independently from the same recording: a file may show corrugation on one side while the other remains normal, so the model must localise the fault to a side rather than simply flagging the file as anomalous."* | **The localization half is solved; independent-per-side judgment is capped by the label schema, not the model** | Features are computed entirely separately for Side I and Side II (Section 3.1), and it's genuinely side-specific: CatBoost's own feature importance ranks `side2_vib_rms_max` and `side1_vib_rms_max` as its top two features by a wide margin, and per-class F1 (Side I 0.68, Side II 0.87) confirms real discrimination, not a majority-side default. What's capped: `Train_Labels.csv` only ever has one label per file (`Normal` / `Side I` / `Side II`, mutually exclusive) — there's no "both sides faulty" label anywhere in the data, so a file can't be judged independently faulty on both sides even in principle. Inherited from the task's own label design, not something feature or model work can change. |
+| 3 | *"The dataset is class-imbalanced — fault cases are a small minority of files, which must be accounted for in model training and evaluation."* | **Addressed** | Training: `class_weight="balanced"` (LogReg), `auto_class_weights="Balanced"` (CatBoost). Evaluation: scored by macro F1 throughout, with a per-class breakdown printed every run because, per `diagnostics.py`, aggregate accuracy would be misleading at a 234:24:14 class split. Went further than the minimum: SMOTE and Balanced Random Forest were both tried and rejected after testing showed they underperform plain class-weighting here (Section 4) — a tested conclusion, not an assumption. |
+
+## 3. How the algorithm works
+
+### 3.1 Feature extraction (41 features per file)
 
 The 128 sensor columns are reshaped to `(10000, 8 car, 8 pos, 2 kind)`
 (kind 0 = vibration, kind 1 = shock). For each of {vibration, shock} x
@@ -75,7 +83,7 @@ scales with how fast the train is moving and a raw RMS threshold would
 conflate speed with corrugation severity. Total: 32 + 8 speed-normalized
 + 1 `speed_kmh` = 41 features.
 
-### Step 2 — soft-voting ensemble
+### 3.2 Soft-voting ensemble
 
 Three classifiers are trained on the same 41 features and combined by
 weighted soft voting (weighted average of `predict_proba`, then argmax):
@@ -94,12 +102,12 @@ the training data only. Final prediction is
 The two gradient-boosted trees get equal, double weight because they are
 individually the two strongest models and roughly comparable in
 strength; the linear model gets a single, smaller weight because on its
-own it is markedly weaker (see Section 3), but it makes decision
-boundaries the two tree models cannot (see Section 3's CatBoost/XGBoost
+own it is markedly weaker (see Section 4), but it makes decision
+boundaries the two tree models cannot (see Section 4's CatBoost/XGBoost
 asymmetry note) so it still moves the vote in cases the trees agree on
 incorrectly.
 
-### Step 3 — shipped weights, not a from-scratch fit every run
+### 3.3 Shipped weights, not a from-scratch fit every run
 
 The fitted ensemble (CatBoost's own `.cbm`, XGBoost's own `.json`, and
 the label encoder + scaler + logistic-regression coefficients in one
@@ -112,7 +120,7 @@ final fit on all of them) and overwrites `weights/` with the result —
 needed only after changing `features.py` or `model.py`, or to verify the
 shipped weights still reproduce.
 
-## 3. What was tried and did not work well
+## 4. What was tried and did not work well
 
 **A 12-model comparison** (Random Forest, Balanced Random Forest, plain
 and SMOTE-augmented XGBoost/LightGBM/CatBoost, Logistic Regression, and
