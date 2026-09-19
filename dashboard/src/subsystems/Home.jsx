@@ -1,33 +1,28 @@
-import { Card, LabelBadge } from "../components/ui.jsx";
+import { LabelBadge } from "../components/ui.jsx";
 import { EntityList } from "../components/EntityBreakdown.jsx";
 
 const SUBSYSTEMS = [
   {
     id: "door",
     title: "Door",
-    task: "Temporal segmentation + binary classification",
     blurb:
-      "Finds every door-open/close cycle in a continuous motor-current stream, then flags each as Normal or Abnormal resistance.",
+      "Observes the cycle of each door, divided into open and close sections, then flags each door as normal or abnormal according to the live data.",
   },
   {
     id: "acv",
     title: "ACV",
-    task: "Fault localisation / ranking",
-    blurb:
-      "Ranks all 8 cars in a train by how likely each is to have a refrigerant leak, from cabin/ambient telemetry.",
+    blurb: "Ranks all 8 cars on the train data by how likely each is to have a refrigerant leak.",
   },
   {
     id: "rail",
     title: "Rail Corrugation",
-    task: "3-class classification",
     blurb:
-      "Classifies a 1-second axle-box vibration/shock recording as Normal, Side I, or Side II corrugation.",
+      "Observes the vibration and shock readings from each rail recording, then classifies it as Normal, Side I, or Side II corrugation.",
   },
   {
     id: "shm",
     title: "SHM",
-    task: "Regression",
-    blurb: "Estimates cumulative fatigue damage from a dynamic-stress time series.",
+    blurb: "Observes the stress readings from each recording over time, then estimates how much fatigue damage has built up.",
   },
 ];
 
@@ -201,7 +196,6 @@ export default function Home({ onNavigate, summaries }) {
             >
               <button onClick={() => onNavigate(s.id)} className="w-full text-left px-4 py-3.5">
                 <div className="text-sm font-semibold text-ink-primary">{s.title}</div>
-                <div className="text-xs text-series-blue mt-0.5">{s.task}</div>
                 <p className="text-xs text-ink-muted mt-1.5">{s.blurb}</p>
 
                 {summary ? (
@@ -227,8 +221,12 @@ export default function Home({ onNavigate, summaries }) {
                     <PredictionPreview id={s.id} summary={summary} />
                   </>
                 ) : (
-                  <div className="text-xs text-ink-muted mt-3 pt-3 border-t border-line-hairline">
-                    Loading sample data…
+                  <div className="flex items-center gap-2 text-xs text-ink-muted mt-3 pt-3 border-t border-line-hairline">
+                    <svg className="animate-spin shrink-0" width="12" height="12" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                      <circle cx="12" cy="12" r="9" stroke="currentColor" strokeWidth="3" opacity="0.25" />
+                      <path d="M21 12a9 9 0 0 0-9-9" stroke="currentColor" strokeWidth="3" strokeLinecap="round" />
+                    </svg>
+                    Running the model — larger files take longer
                   </div>
                 )}
               </button>
@@ -238,16 +236,6 @@ export default function Home({ onNavigate, summaries }) {
           );
         })}
       </div>
-
-      <Card>
-        <div className="text-xs font-medium text-ink-muted uppercase tracking-wide mb-1.5">
-          Why there's no single "train status"
-        </div>
-        <p className="text-xs text-ink-muted">
-          The four datasets don't share a train or car identifier, so each box above reports its own subsystem's
-          predictions independently rather than a single combined status.
-        </p>
-      </Card>
     </div>
   );
 }

@@ -107,16 +107,7 @@ export default function RailPage({ onSummary }) {
   return (
     <BatchSubsystemPage
       title="Rail corrugation predictions"
-      description={
-        <>
-          Drop one or many axle-box vibration/shock recordings (e.g. <code className="text-ink-secondary">Train1.csv</code>
-          ...<code className="text-ink-secondary">Train272.csv</code>, or a .zip of several). Each file runs through
-          the real validated ensemble (feature extraction + CatBoost/XGBoost/LogReg soft voting) and is classified
-          as Normal, Side I, or Side II corrugation. Check against{" "}
-          <code className="text-ink-secondary">Train_Labels.csv</code> by dropping Train files, or drop Test files
-          for a real submission-ready run.
-        </>
-      }
+      description="Observes the vibration and shock readings from each rail recording, then classifies it as Normal, Side I, or Side II corrugation."
       csvFilename="rail_predictions.csv"
       accept=".csv"
       parseFile={parseRailFile}

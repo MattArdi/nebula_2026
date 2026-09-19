@@ -210,14 +210,9 @@ export default function DoorPage({ onSummary }) {
       <Card>
         <div className="text-sm font-medium text-ink-primary mb-1">What this does</div>
         <p className="text-xs text-ink-muted">
-          Finds every door-open/close cycle in a continuous door-controller stream, then classifies each cycle as{" "}
-          <span className="text-ink-secondary">Normal</span> or{" "}
-          <span className="text-ink-secondary">Abnormal resistance</span> from its motor current and back-EMF
-          profile, using the real validated Door pipeline. Opens pre-loaded with the labelled{" "}
-          <code className="text-ink-secondary">Train.csv</code> stream, checked against{" "}
-          <code className="text-ink-secondary">Train_Segments_Answer.csv</code>. Drop your own{" "}
-          <code className="text-ink-secondary">.csv</code> stream(s) (Train or the real Test.csv) to add more —
-          switch between them with the file picker below.
+          Observes the cycle of each door, divided into open and close sections over a continuous timing period,
+          then flags each door as <span className="text-ink-secondary">normal</span> or{" "}
+          <span className="text-ink-secondary">abnormal</span> according to the live data.
         </p>
       </Card>
 

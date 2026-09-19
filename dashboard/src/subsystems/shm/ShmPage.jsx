@@ -166,17 +166,7 @@ export default function ShmPage({ onSummary }) {
   return (
     <BatchSubsystemPage
       title="Cumulative fatigue damage predictions"
-      description={
-        <>
-          Drop one or many dynamic-stress time-series files (e.g. <code className="text-ink-secondary">train01.csv</code>
-          ...<code className="text-ink-secondary">train64.csv</code>, or a .zip of several). Each file runs through
-          the real validated pipeline (rainflow cycle counting + Miner's linear damage rule) to predict cumulative
-          fatigue damage, shown as % of fatigue life remaining with an error band from the calibration's own
-          leave-one-out cross-validation. Click a row for that file's real damage build-up curve. Check against{" "}
-          <code className="text-ink-secondary">Train_Labels.csv</code> by dropping Train files, or drop Test files
-          for a real submission-ready run.
-        </>
-      }
+      description="Observes the stress readings from each recording over time, then estimates how much fatigue damage has built up."
       csvFilename="shm_predictions.csv"
       accept=".csv"
       parseFile={parseShmFile}

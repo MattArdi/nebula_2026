@@ -39,7 +39,7 @@ async function computeRun(file) {
     rankedCars,
     diagnostics: result.diagnostics ?? null,
     csvText: result.csv,
-    statusMessage: `Ranked ${rankedCars.length} cars from the real ACV pipeline. Most likely faulty: Car ${rankedCars[0]}.`,
+    statusMessage: `Ranked ${rankedCars.length} cars. Most likely faulty: Car ${rankedCars[0]}.`,
   };
 }
 
@@ -150,11 +150,7 @@ export default function AcvPage({ onSummary }) {
       <Card>
         <div className="text-sm font-medium text-ink-primary mb-1">What this does</div>
         <p className="text-xs text-ink-muted">
-          Ranks every car in a file by how much its readings deviate from its peers at the same moments, using the
-          real validated ACV pipeline. Opens pre-loaded with <code className="text-ink-secondary">acv_case_01.xlsx</code>,
-          a labelled Train case checked against <code className="text-ink-secondary">Train_Labels.csv</code>. Drop any
-          other <code className="text-ink-secondary">.xlsx</code> case file(s) (Train or Test) to add more — switch
-          between them with the file picker below.
+          Ranks all 8 cars on the train data by how likely each is to have a refrigerant leak.
         </p>
       </Card>
 

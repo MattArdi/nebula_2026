@@ -15,6 +15,7 @@ Run:
     uvicorn backend.api.main:app --reload --port 8000
 """
 
+import asyncio
 import json
 import shutil
 import subprocess
@@ -66,7 +67,7 @@ app.add_middleware(
 )
 
 
-def _run_subsystem(key: str, files: list[UploadFile]) -> dict:
+async def _run_subsystem(key: str, files: list[UploadFile]) -> dict:
     cfg = SUBSYSTEMS[key]
     pipeline_script = REPO_ROOT / "backend" / cfg["pipeline_dir"] / cfg["version"] / "run_pipeline.py"
     if not pipeline_script.exists():
@@ -95,7 +96,15 @@ def _run_subsystem(key: str, files: list[UploadFile]) -> dict:
             "--input", str(input_path), "--output", str(output_path),
             "--diagnostics-output", str(diagnostics_path),
         ]
-        result = subprocess.run(cmd, capture_output=True, text=True, cwd=str(pipeline_script.parent))
+        # subprocess.run blocks its calling thread for the pipeline's full
+        # runtime (interpreter startup + heavy imports + inference). Run it
+        # in a worker thread so concurrent requests -- e.g. all four
+        # subsystem pages auto-loading their sample file at once on page
+        # load -- actually run in parallel instead of queueing behind each
+        # other on FastAPI's single asyncio event loop.
+        result = await asyncio.to_thread(
+            subprocess.run, cmd, capture_output=True, text=True, cwd=str(pipeline_script.parent)
+        )
 
         if result.returncode != 0 or not output_path.exists():
             raise HTTPException(status_code=500, detail={
@@ -129,22 +138,22 @@ def health():
 
 @app.post("/api/door/predict")
 async def predict_door(file: UploadFile = File(...)):
-    return _run_subsystem("door", [file])
+    return await _run_subsystem("door", [file])
 
 
 @app.post("/api/acv/predict")
 async def predict_acv(file: UploadFile = File(...)):
-    return _run_subsystem("acv", [file])
+    return await _run_subsystem("acv", [file])
 
 
 @app.post("/api/rail/predict")
 async def predict_rail(files: list[UploadFile] = File(...)):
-    return _run_subsystem("rail", files)
+    return await _run_subsystem("rail", files)
 
 
 @app.post("/api/shm/predict")
 async def predict_shm(files: list[UploadFile] = File(...)):
-    return _run_subsystem("shm", files)
+    return await _run_subsystem("shm", files)
 
 
 # Registered last: this app has no client-side routing (no react-router),
