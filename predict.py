@@ -59,7 +59,11 @@ SUBSYSTEMS = {
     # v2 doesn't have. Kept in sync with backend/api/main.py's SUBSYSTEMS.
     "Door":             {"pipeline_dir": "Door",            "version": "v3_adaptive",   "output": "door_predictions.csv", "input_kind": "single_csv"},
     "ACV":              {"pipeline_dir": "ACV",              "version": "v2_rule-based", "output": "acv_predictions.csv",  "input_kind": "single_xlsx"},
-    "Rail_Corrugation": {"pipeline_dir": "Rail Corrugation", "version": "v2_ensemble",   "output": "rail_predictions.csv", "input_kind": "dir"},
+    # Rail runs v3_frequency, not v2_ensemble: a real, validated improvement
+    # (macro F1 0.8411 -> 0.8808 in repeated CV -- see backend/Rail
+    # Corrugation/v3_frequency/algorithm.md Section 5), not a byte-identical
+    # swap like Door's above -- some Test predictions genuinely differ.
+    "Rail_Corrugation": {"pipeline_dir": "Rail Corrugation", "version": "v3_frequency",  "output": "rail_predictions.csv", "input_kind": "dir"},
     "SHM":              {"pipeline_dir": "SHM",              "version": "v2_rule-based", "output": "shm_predictions.csv",  "input_kind": "dir"},
 }
 

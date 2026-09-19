@@ -36,17 +36,25 @@ STATIC_DIR = REPO_ROOT / "static"
 
 # Mirrors predict.py's SUBSYSTEMS config, so the dashboard and the CLI
 # submission path (predict.py) always run the same pipeline version --
-# except Door, deliberately: v3_adaptive is byte-identical to v2_rule-based
-# on real Test.csv (verified; see backend/Door/v3_adaptive/algorithm.md
-# Section 3.2), so running it here costs nothing and unlocks the
-# low_confidence/out_of_range diagnostics v2 doesn't compute. predict.py's
-# own SUBSYSTEMS config was updated to match, for the same reason.
+# except Door and Rail, deliberately:
+#   Door:  v3_adaptive is byte-identical to v2_rule-based on real Test.csv
+#          (verified; see backend/Door/v3_adaptive/algorithm.md Section
+#          3.2), so running it here costs nothing and unlocks the
+#          low_confidence/out_of_range diagnostics v2 doesn't compute.
+#   Rail:  v3_frequency is NOT byte-identical to v2_ensemble -- it's a
+#          real, validated improvement (macro F1 0.8411 -> 0.8808 in
+#          repeated CV; see backend/Rail Corrugation/v3_frequency/
+#          algorithm.md Section 5 for the full evidence), so some Test
+#          predictions genuinely differ from v2's. Deployed anyway: the
+#          whole point of building it was to actually use it.
+# predict.py's own SUBSYSTEMS config was updated to match both, for the
+# same reasons.
 SUBSYSTEMS = {
     "door": {"pipeline_dir": "Door", "version": "v3_adaptive",
               "output": "door_predictions.csv", "input_kind": "single"},
     "acv": {"pipeline_dir": "ACV", "version": "v2_rule-based",
              "output": "acv_predictions.csv", "input_kind": "single"},
-    "rail": {"pipeline_dir": "Rail Corrugation", "version": "v2_ensemble",
+    "rail": {"pipeline_dir": "Rail Corrugation", "version": "v3_frequency",
               "output": "rail_predictions.csv", "input_kind": "multi"},
     "shm": {"pipeline_dir": "SHM", "version": "v2_rule-based",
              "output": "shm_predictions.csv", "input_kind": "multi"},
