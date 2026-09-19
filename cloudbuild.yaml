@@ -1,0 +1,73 @@
+# Cloud Build config for a GitHub-triggered deploy to Cloud Run.
+#
+# One-time setup (not part of this file -- these are gcloud commands you
+# run once, from a machine with the repo checked out and gcloud authed):
+#
+#   1. Create an Artifact Registry repo to hold the built images:
+#        gcloud artifacts repositories create nebula-ps3 \
+#          --repository-format=docker --location=us-central1
+#
+#   2. Connect this GitHub repo to Cloud Build (one-time OAuth) and create
+#      the trigger that runs this file on every push to app_working:
+#        gcloud builds triggers create github \
+#          --name=nebula-ps3-deploy \
+#          --repo-name=nebula_2026 --repo-owner=MattArdi \
+#          --branch-pattern='^app_working$' \
+#          --build-config=cloudbuild.yaml
+#      (If the repo isn't connected yet, this prompts you through the
+#      GitHub App install/authorize flow first.)
+#
+# After that, every push to app_working builds, pushes, and deploys a new
+# Cloud Run revision automatically -- nothing more to run by hand.
+
+steps:
+  - id: build
+    name: gcr.io/cloud-builders/docker
+    args:
+      - build
+      - -t
+      - ${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPOSITORY}/${_SERVICE}:$SHORT_SHA
+      - -t
+      - ${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPOSITORY}/${_SERVICE}:latest
+      - .
+
+  - id: push
+    name: gcr.io/cloud-builders/docker
+    args:
+      - push
+      - --all-tags
+      - ${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPOSITORY}/${_SERVICE}
+
+  - id: deploy
+    name: gcr.io/google-cloud-sdk/slim
+    entrypoint: gcloud
+    args:
+      - run
+      - deploy
+      - ${_SERVICE}
+      - --image=${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPOSITORY}/${_SERVICE}:$SHORT_SHA
+      - --region=${_REGION}
+      - --platform=managed
+      # Public URL, no auth in front of it -- matches the dashboard's own
+      # login gate, which is a client-side-only demo, not real access
+      # control. Drop this flag (and add --no-allow-unauthenticated, plus
+      # an IAM binding for whoever should reach it) before this holds
+      # anything you actually want gated.
+      - --allow-unauthenticated
+      # catboost + xgboost + scipy have a real memory footprint; 2Gi gives
+      # headroom without guessing at a tighter number.
+      - --memory=2Gi
+      - --min-instances=0
+      - --max-instances=3
+
+images:
+  - ${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPOSITORY}/${_SERVICE}:$SHORT_SHA
+  - ${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPOSITORY}/${_SERVICE}:latest
+
+substitutions:
+  _SERVICE: nebula-ps3-dashboard
+  _REGION: us-central1
+  _REPOSITORY: nebula-ps3
+
+options:
+  logging: CLOUD_LOGGING_ONLY
