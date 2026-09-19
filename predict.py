@@ -45,30 +45,30 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent
 
-# subsystem key -> (folder under backend/, which pre-built version of that
+# subsystem key -> (folder under app/backend/, which pre-built version of that
 # subsystem's code to run, output filename, input kind). "version" names a
-# subfolder inside backend/<pipeline_dir>/ that contains a run_pipeline.py
+# subfolder inside app/backend/<pipeline_dir>/ that contains a run_pipeline.py
 # following the --data-dir/--input/--output convention (every subsystem's
 # v2_rule-based/ does) -- swap it here to point at a different pre-built
 # pipeline without touching any orchestration logic below.
 SUBSYSTEMS = {
     # Door runs v3_adaptive, not v2_rule-based: verified byte-identical to
-    # v2 on real Test.csv (see backend/Door/v3_adaptive/algorithm.md
+    # v2 on real Test.csv (see app/backend/Door/v3_adaptive/algorithm.md
     # Section 3.2), so this changes nothing about the submitted labels
     # while additionally computing the low_confidence/out_of_range signals
-    # v2 doesn't have. Kept in sync with backend/api/main.py's SUBSYSTEMS.
+    # v2 doesn't have. Kept in sync with app/backend/api/main.py's SUBSYSTEMS.
     "Door":             {"pipeline_dir": "Door",            "version": "v3_adaptive",   "output": "door_predictions.csv", "input_kind": "single_csv"},
     "ACV":              {"pipeline_dir": "ACV",              "version": "v2_rule-based", "output": "acv_predictions.csv",  "input_kind": "single_xlsx"},
     # Rail runs v4_class_weighted, not v2_ensemble: a real, validated
     # improvement (macro F1 0.8809 -> 0.8940 in repeated CV, confirmed on a
-    # real held-out score 0.8552 -> 0.8877 -- see backend/Rail Corrugation/
+    # real held-out score 0.8552 -> 0.8877 -- see app/backend/Rail Corrugation/
     # v4_class_weighted/algorithm.md Section 5), not a byte-identical swap
     # like Door's above -- some Test predictions genuinely differ.
     "Rail_Corrugation": {"pipeline_dir": "Rail Corrugation", "version": "v4_class_weighted", "output": "rail_predictions.csv", "input_kind": "dir"},
     # SHM runs v3_ensemble_blend, not the pure-physics v2_rule-based: a
     # small, real held-out improvement (0.9652 -> 0.9668), though the
     # underlying LOO gain that motivated it (+0.0006) is noise-level and
-    # unconfirmed by an independent check -- see backend/SHM/
+    # unconfirmed by an independent check -- see app/backend/SHM/
     # v3_ensemble_blend/algorithm.md Section 5 for the full, honest account
     # of why this shipped anyway.
     "SHM":              {"pipeline_dir": "SHM",              "version": "v3_ensemble_blend", "output": "shm_predictions.csv",  "input_kind": "dir"},
@@ -178,7 +178,7 @@ def run_subsystem(subsystem: str, cfg: dict, zip_root: Path, data_root: Path, ou
     except SystemExit as e:
         return False, str(e)
 
-    pipeline_script = REPO_ROOT / "backend" / cfg["pipeline_dir"] / cfg["version"] / "run_pipeline.py"
+    pipeline_script = REPO_ROOT / "app" / "backend" / cfg["pipeline_dir"] / cfg["version"] / "run_pipeline.py"
     if not pipeline_script.exists():
         return False, f"FAILED -- pipeline script not found: {pipeline_script}"
 

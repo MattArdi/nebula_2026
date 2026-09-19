@@ -2,7 +2,7 @@
 Local prediction API for the PS3 dashboard.
 
 Wraps each subsystem's already-validated run_pipeline.py
-(backend/<Subsystem>/<version>/run_pipeline.py) via subprocess -- the same
+(app/backend/<Subsystem>/<version>/run_pipeline.py) via subprocess -- the same
 approach root predict.py uses, and for the same reason: each subsystem's
 modules (rules.py, diagnostics.py, model.py, ...) share names across
 subsystems, so importing more than one into a single long-running Python
@@ -39,16 +39,16 @@ STATIC_DIR = REPO_ROOT / "static"
 # submission path (predict.py) always run the same pipeline version --
 # except Door, deliberately:
 #   Door:  v3_adaptive is byte-identical to v2_rule-based on real Test.csv
-#          (verified; see backend/Door/v3_adaptive/algorithm.md Section
+#          (verified; see app/backend/Door/v3_adaptive/algorithm.md Section
 #          3.2), so running it here costs nothing and unlocks the
 #          low_confidence/out_of_range diagnostics v2 doesn't compute.
 #   Rail:  v4_class_weighted -- real, validated improvement (macro F1
 #          0.8809 -> 0.8940 in CV, confirmed 0.8552 -> 0.8877 on a real
-#          held-out score; see backend/Rail Corrugation/
+#          held-out score; see app/backend/Rail Corrugation/
 #          v4_class_weighted/algorithm.md Section 5).
 #   SHM:   v3_ensemble_blend -- small, real held-out improvement (0.9652
 #          -> 0.9668), though the LOO gain behind it is noise-level and
-#          unconfirmed by an independent check; see backend/SHM/
+#          unconfirmed by an independent check; see app/backend/SHM/
 #          v3_ensemble_blend/algorithm.md Section 5 for the honest
 #          account of why it shipped anyway.
 # predict.py's own SUBSYSTEMS config is kept in sync with all three.

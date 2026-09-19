@@ -1,9 +1,15 @@
+# Everything needed to run the app (the four subsystem pipelines, the API
+# layer wrapping them, and the dashboard frontend) lives under app/ --
+# see app/README's layout note. Datasets/, predictions/, and predict.py
+# (the batch-submission CLI) are repo-level, not part of the served app,
+# and aren't copied into the image.
+
 # ---- Stage 1: build the frontend ----
 FROM node:20-slim AS frontend-build
 WORKDIR /app/dashboard
-COPY dashboard/package.json dashboard/package-lock.json ./
+COPY app/dashboard/package.json app/dashboard/package-lock.json ./
 RUN npm ci
-COPY dashboard/ ./
+COPY app/dashboard/ ./
 # The deployed backend serves this build itself (see the runtime stage's
 # StaticFiles mount), so API calls are same-origin -- an empty base means
 # apiClient.js's `${API_BASE}${path}` collapses to a plain relative URL.
@@ -19,12 +25,12 @@ WORKDIR /app
 RUN apt-get update && apt-get install -y --no-install-recommends libgomp1 \
     && rm -rf /var/lib/apt/lists/*
 
-COPY backend/api/requirements.txt backend/api/requirements.txt
+COPY app/backend/api/requirements.txt backend/api/requirements.txt
 RUN pip install --no-cache-dir -r backend/api/requirements.txt
 
 # The four subsystem pipelines (rules/features/model code + shipped
 # artifacts/weights) plus the API layer that wraps them via subprocess.
-COPY backend/ backend/
+COPY app/backend/ backend/
 
 # Built once in stage 1; served by main.py's StaticFiles mount at "/".
 COPY --from=frontend-build /app/dashboard/dist/ static/

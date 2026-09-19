@@ -74,6 +74,19 @@ def parse_args() -> argparse.Namespace:
                          help=f"Where fitted artifacts are loaded from / saved to (default: {DEFAULT_ARTIFACTS_DIR}).")
     parser.add_argument("--retrain", action="store_true",
                          help="Refit the full blend from --data-dir instead of loading shipped artifacts.")
+    parser.add_argument(
+        "--diagnostics-output", type=Path, default=None,
+        help="Optional: write a JSON array alongside --output, one object per file (same order), "
+             "with values already computed but that don't belong in the submission CSV -- "
+             "remaining fatigue life (1 - damage, as a %%), the extrapolation flag/reason (physics "
+             "proxy vs. Train's demonstrated range), and a damage-build-up curve recomputed on "
+             "growing prefixes of the file via real rainflow counting (the physics member's curve "
+             "specifically -- the ML correction is a single point-in-time adjustment, not something "
+             "that varies meaningfully over incremental prefixes the way the physics formula does). "
+             "error_band_pct is always null here (unlike v2, this blend has no LOO-MAPE stored on "
+             "its artifacts). Purely additive: --output's contents are identical whether or not "
+             "this is passed.",
+    )
     return parser.parse_args()
 
 
@@ -186,6 +199,24 @@ def main() -> None:
     print_header("DONE")
     print(f"  Wrote {len(out_df)} predictions to {args.output}")
     print(f"  Columns: {list(out_df.columns)}  (matches 04_Example_Submission/shm_predictions.csv)")
+
+    if args.diagnostics_output:
+        import json
+        diag = []
+        for f, (_, row) in zip(files, pred_df.iterrows()):
+            damage = float(row["prediction"])
+            x = physics.load_stress_series(f)
+            diag.append({
+                "file_id": row["file_id"],
+                "damage": damage,
+                "remaining_life_pct": max(0.0, (1.0 - damage) * 100.0),
+                "error_band_pct": None,
+                "extrapolation_flagged": bool(row["flagged"]),
+                "extrapolation_reason": row["reason"],
+                "damage_progress": physics.damage_progress(x, blend.physics_C, blend.physics_m),
+            })
+        args.diagnostics_output.write_text(json.dumps(diag, indent=2))
+        print(f"  Wrote per-file diagnostics to {args.diagnostics_output}")
 
 
 if __name__ == "__main__":

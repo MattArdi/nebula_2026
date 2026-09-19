@@ -8,8 +8,8 @@ Datasets/
 .gitignore
 
 # Rebuilt inside the image by the frontend-build stage.
-dashboard/node_modules/
-dashboard/dist/
+app/dashboard/node_modules/
+app/dashboard/dist/
 
 __pycache__/
 **/__pycache__/
