@@ -59,12 +59,19 @@ SUBSYSTEMS = {
     # v2 doesn't have. Kept in sync with backend/api/main.py's SUBSYSTEMS.
     "Door":             {"pipeline_dir": "Door",            "version": "v3_adaptive",   "output": "door_predictions.csv", "input_kind": "single_csv"},
     "ACV":              {"pipeline_dir": "ACV",              "version": "v2_rule-based", "output": "acv_predictions.csv",  "input_kind": "single_xlsx"},
-    # Rail runs v3_frequency, not v2_ensemble: a real, validated improvement
-    # (macro F1 0.8411 -> 0.8808 in repeated CV -- see backend/Rail
-    # Corrugation/v3_frequency/algorithm.md Section 5), not a byte-identical
-    # swap like Door's above -- some Test predictions genuinely differ.
-    "Rail_Corrugation": {"pipeline_dir": "Rail Corrugation", "version": "v3_frequency",  "output": "rail_predictions.csv", "input_kind": "dir"},
-    "SHM":              {"pipeline_dir": "SHM",              "version": "v2_rule-based", "output": "shm_predictions.csv",  "input_kind": "dir"},
+    # Rail runs v4_class_weighted, not v2_ensemble: a real, validated
+    # improvement (macro F1 0.8809 -> 0.8940 in repeated CV, confirmed on a
+    # real held-out score 0.8552 -> 0.8877 -- see backend/Rail Corrugation/
+    # v4_class_weighted/algorithm.md Section 5), not a byte-identical swap
+    # like Door's above -- some Test predictions genuinely differ.
+    "Rail_Corrugation": {"pipeline_dir": "Rail Corrugation", "version": "v4_class_weighted", "output": "rail_predictions.csv", "input_kind": "dir"},
+    # SHM runs v3_ensemble_blend, not the pure-physics v2_rule-based: a
+    # small, real held-out improvement (0.9652 -> 0.9668), though the
+    # underlying LOO gain that motivated it (+0.0006) is noise-level and
+    # unconfirmed by an independent check -- see backend/SHM/
+    # v3_ensemble_blend/algorithm.md Section 5 for the full, honest account
+    # of why this shipped anyway.
+    "SHM":              {"pipeline_dir": "SHM",              "version": "v3_ensemble_blend", "output": "shm_predictions.csv",  "input_kind": "dir"},
 }
 
 # Accepted spellings for each subsystem's folder, inside the zip and under --data-root.
