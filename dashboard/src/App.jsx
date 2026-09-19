@@ -3,6 +3,7 @@ import { TopBar, TopNav } from "./components/Layout.jsx";
 import Window from "./components/Window.jsx";
 import LoginPage from "./components/LoginPage.jsx";
 import Home from "./subsystems/Home.jsx";
+import FleetRanking from "./subsystems/FleetRanking.jsx";
 import DoorPage from "./subsystems/door/DoorPage.jsx";
 import AcvPage from "./subsystems/acv/AcvPage.jsx";
 import RailPage from "./subsystems/rail/RailPage.jsx";
@@ -16,6 +17,12 @@ const TITLES = {
   rail: "Rail Corrugation",
 };
 
+const SUBSYSTEM_IDS = Object.keys(TITLES);
+
+// The top navigation buttons open a fleet-ranking window per subsystem, kept
+// under its own id so it never collides with the subsystem's dataset window.
+const rankingId = (id) => `${id}-ranking`;
+
 // Cascading defaults so windows opened one after another don't land exactly
 // on top of each other — the user drags them wherever they actually want.
 const DEFAULT_WINDOWS = {
@@ -23,6 +30,10 @@ const DEFAULT_WINDOWS = {
   acv: { open: false, x: 90, y: 64, width: 640, height: 580, z: 1, maximized: false },
   shm: { open: false, x: 140, y: 104, width: 680, height: 600, z: 1, maximized: false },
   rail: { open: false, x: 190, y: 144, width: 680, height: 600, z: 1, maximized: false },
+  "door-ranking": { open: false, x: 300, y: 16, width: 560, height: 690, z: 1, maximized: false },
+  "acv-ranking": { open: false, x: 340, y: 44, width: 560, height: 690, z: 1, maximized: false },
+  "shm-ranking": { open: false, x: 380, y: 72, width: 560, height: 690, z: 1, maximized: false },
+  "rail-ranking": { open: false, x: 420, y: 100, width: 560, height: 690, z: 1, maximized: false },
 };
 
 export default function App() {
@@ -69,7 +80,8 @@ export default function App() {
     setWindows((prev) => ({ ...prev, [id]: { ...prev[id], maximized: !prev[id].maximized } }));
   }
 
-  const openIds = new Set(Object.keys(windows).filter((id) => windows[id].open));
+  // The nav highlights a subsystem while its ranking window is open.
+  const openIds = new Set(SUBSYSTEM_IDS.filter((id) => windows[rankingId(id)].open));
 
   if (!user) {
     return (
@@ -93,7 +105,7 @@ export default function App() {
           setUser(null);
         }}
       />
-      <TopNav openIds={openIds} onNavigate={openWindow} />
+      <TopNav openIds={openIds} onNavigate={(id) => openWindow(id === "home" ? id : rankingId(id))} />
 
       {/* The desktop: Overview is the permanent backdrop; every subsystem
           page mounts once, immediately, and stays mounted for the whole
@@ -152,6 +164,24 @@ export default function App() {
         >
           <ShmPage onSummary={(s) => reportSummary("shm", s)} />
         </Window>
+
+        {SUBSYSTEM_IDS.map((id) => {
+          const wid = rankingId(id);
+          return (
+            <Window
+              key={wid}
+              title={`${TITLES[id]} Fleet Ranking`}
+              {...windows[wid]}
+              onClose={() => closeWindow(wid)}
+              onFocus={() => bringToFront(wid)}
+              onMove={(x, y) => moveWindow(wid, x, y)}
+              onResize={(w, h) => resizeWindow(wid, w, h)}
+              onToggleMaximize={() => toggleMaximize(wid)}
+            >
+              <FleetRanking id={id} summary={summaries[id]} onOpen={() => openWindow(id)} />
+            </Window>
+          );
+        })}
       </main>
     </div>
   );

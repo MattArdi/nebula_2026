@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import Logo from "./Logo.jsx";
 
 const NAV_ITEMS = [
   { id: "home", label: "Overview" },
@@ -8,13 +9,11 @@ const NAV_ITEMS = [
   { id: "rail", label: "Rail Corrugation" },
 ];
 
+// White tile so the blue shield reads against the navy header.
 function BrandMark() {
   return (
-    <div className="w-8 h-8 rounded-lg bg-white/15 border border-white/30 flex items-center justify-center shrink-0">
-      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-        <path d="M4 7h16M4 12h16M4 17h16" stroke="#ffffff" strokeWidth="1.8" strokeLinecap="round" />
-        <path d="M7 4v3M7 17v3M12 4v3M12 17v3M17 4v3M17 17v3" stroke="#ffffff" strokeWidth="1.8" strokeLinecap="round" />
-      </svg>
+    <div className="rounded-lg bg-white px-1.5 py-1 shrink-0">
+      <Logo height={44} />
     </div>
   );
 }

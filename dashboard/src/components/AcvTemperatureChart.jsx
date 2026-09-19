@@ -15,7 +15,7 @@ const AXIS = "#908e87";
 function ChartTooltip({ active, payload, label, faultyCarId }) {
   if (!active || !payload?.length) return null;
   return (
-    <div className="rounded-md border border-line-border bg-surface-raised px-3 py-2 text-xs shadow-lg">
+    <div className="rounded-md border border-line-border bg-surface-raised px-3 py-2 text-sm shadow-lg">
       <div className="text-ink-muted mb-1">{Number(label).toFixed(0)}% of cycle</div>
       {payload.map((p) => (
         <div key={p.dataKey} style={{ color: p.color }}>
@@ -67,10 +67,10 @@ export default function AcvTemperatureChart({ indoor, faultyCarId }) {
 
   return (
     <Card>
-      <div className="text-sm font-medium text-ink-primary">Indoor Temperature of Car</div>
-      <p className="text-xs text-ink-muted mt-0.5 mb-3">Car indicated as red is the faulty car.</p>
+      <div className="text-base font-medium text-ink-primary">Indoor Temperature of Car</div>
+      <p className="text-sm text-ink-muted mt-0.5 mb-3">Car indicated as red is the faulty car.</p>
 
-      <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 mb-3 text-[11px]">
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 mb-3 text-sm">
         {carIds.map((id) => {
           const checked = selected.has(id);
           const faulty = id === faultyCarId;
@@ -80,7 +80,7 @@ export default function AcvTemperatureChart({ indoor, faultyCarId }) {
                 type="checkbox"
                 checked={checked}
                 onChange={() => toggle(id)}
-                className="w-3 h-3"
+                className="w-3.5 h-3.5"
                 style={{ accentColor: colorFor(id) }}
               />
               <span className={faulty ? "text-status-critical font-medium" : checked ? "text-ink-secondary" : "text-ink-muted"}>
@@ -95,7 +95,7 @@ export default function AcvTemperatureChart({ indoor, faultyCarId }) {
         </span>
       </div>
 
-      <ResponsiveContainer width="100%" height={280}>
+      <ResponsiveContainer width="100%" height={310}>
         <LineChart data={points} margin={{ top: 8, right: 16, left: 4, bottom: 0 }}>
           <CartesianGrid stroke={GRID} vertical={false} />
           <XAxis
@@ -103,24 +103,24 @@ export default function AcvTemperatureChart({ indoor, faultyCarId }) {
             type="number"
             domain={[0, 100]}
             tickFormatter={(v) => `${v.toFixed(0)}%`}
-            tick={{ fill: AXIS, fontSize: 11 }}
+            tick={{ fill: AXIS, fontSize: 13 }}
             axisLine={{ stroke: GRID }}
             tickLine={false}
-            height={44}
-            label={{ value: "Percentage of Cycle (%)", position: "insideBottom", offset: 2, fill: AXIS, fontSize: 11 }}
+            height={52}
+            label={{ value: "Percentage of Cycle (%)", position: "insideBottom", offset: 2, fill: AXIS, fontSize: 13 }}
           />
           <YAxis
-            tick={{ fill: AXIS, fontSize: 11 }}
+            tick={{ fill: AXIS, fontSize: 13 }}
             axisLine={{ stroke: GRID }}
             tickLine={false}
-            width={56}
+            width={64}
             domain={[(min) => Math.floor(min) - 1, (max) => Math.ceil(max) + 1]}
             label={{
               value: "Indoor Car Temperature (°C)",
               angle: -90,
               position: "insideLeft",
               offset: 4,
-              style: { textAnchor: "middle", fill: AXIS, fontSize: 11 },
+              style: { textAnchor: "middle", fill: AXIS, fontSize: 13 },
             }}
           />
           <Tooltip content={<ChartTooltip faultyCarId={faultyCarId} />} cursor={{ stroke: AXIS, strokeWidth: 1 }} />

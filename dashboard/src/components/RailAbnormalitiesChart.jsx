@@ -7,14 +7,14 @@ const COLORS = { Normal: "#0ca30c", "Side I": "#ec835a", "Side II": "#e66767" };
 const GRID = "#e3dfd3";
 const AXIS = "#908e87";
 
-const CALLOUT_W = 148;
-const CALLOUT_H = 26;
+const CALLOUT_W = 176;
+const CALLOUT_H = 30;
 
 function ChartTooltip({ active, payload }) {
   if (!active || !payload?.length) return null;
   const point = payload[0].payload;
   return (
-    <div className="rounded-md border border-line-border bg-surface-raised px-3 py-2 text-xs shadow-lg">
+    <div className="rounded-md border border-line-border bg-surface-raised px-3 py-2 text-sm shadow-lg">
       <div className="text-ink-muted mb-1">Second {point.second}</div>
       <div style={{ color: COLORS[point.label] }}>{point.label}</div>
     </div>
@@ -35,7 +35,7 @@ function PinnedPoint({ cx, cy, point }) {
     <g pointerEvents="none">
       <circle cx={cx} cy={cy} r={9} fill="none" stroke={color} strokeWidth={2} />
       <rect x={x} y={y} width={CALLOUT_W} height={CALLOUT_H} rx={5} fill="#ffffff" stroke={color} strokeWidth={1.5} />
-      <text x={x + CALLOUT_W / 2} y={y + CALLOUT_H / 2 + 4} textAnchor="middle" fontSize={11} fontWeight={600} fill={color}>
+      <text x={x + CALLOUT_W / 2} y={y + CALLOUT_H / 2 + 5} textAnchor="middle" fontSize={13} fontWeight={600} fill={color}>
         Second {point.second} — {point.label}
       </text>
     </g>
@@ -64,9 +64,9 @@ export default function RailAbnormalitiesChart({ rows, activeIndex = null }) {
 
   return (
     <Card>
-      <div className="text-sm font-medium text-ink-primary mb-3">Abnormalities Detected</div>
+      <div className="text-base font-medium text-ink-primary mb-3">Abnormalities Detected</div>
 
-      <ResponsiveContainer width="100%" height={240}>
+      <ResponsiveContainer width="100%" height={270}>
         <ScatterChart margin={{ top: 12, right: 16, left: 4, bottom: 0 }}>
           <CartesianGrid stroke={GRID} vertical={false} />
           <XAxis
@@ -74,11 +74,11 @@ export default function RailAbnormalitiesChart({ rows, activeIndex = null }) {
             type="number"
             domain={[0, 100]}
             tickFormatter={(v) => `${v.toFixed(0)}%`}
-            tick={{ fill: AXIS, fontSize: 11 }}
+            tick={{ fill: AXIS, fontSize: 13 }}
             axisLine={{ stroke: GRID }}
             tickLine={false}
-            height={44}
-            label={{ value: "Percentage of Cycle (%)", position: "insideBottom", offset: 2, fill: AXIS, fontSize: 11 }}
+            height={52}
+            label={{ value: "Percentage of Cycle (%)", position: "insideBottom", offset: 2, fill: AXIS, fontSize: 13 }}
           />
           <YAxis
             dataKey="level"
@@ -86,10 +86,10 @@ export default function RailAbnormalitiesChart({ rows, activeIndex = null }) {
             domain={[-0.5, 2.5]}
             ticks={[0, 1, 2]}
             tickFormatter={(v) => Object.keys(LEVELS)[v]}
-            tick={{ fill: AXIS, fontSize: 11 }}
+            tick={{ fill: AXIS, fontSize: 13 }}
             axisLine={{ stroke: GRID }}
             tickLine={false}
-            width={56}
+            width={66}
           />
           <ZAxis range={[50, 50]} />
           <Tooltip content={<ChartTooltip />} cursor={{ strokeDasharray: "3 3", stroke: AXIS }} />

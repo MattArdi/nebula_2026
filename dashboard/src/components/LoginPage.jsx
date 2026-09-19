@@ -1,4 +1,5 @@
 import { useState } from "react";
+import Logo from "./Logo.jsx";
 
 function EyeIcon({ open }) {
   return open ? (
@@ -55,18 +56,8 @@ export default function LoginPage({ onLogin }) {
 
       <div className="relative w-full max-w-[400px]">
         <div className="flex flex-col items-center mb-8">
-          <div className="w-11 h-11 rounded-xl bg-series-blue/15 border border-series-blue/30 flex items-center justify-center mb-3">
-            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-              <path d="M4 7h16M4 12h16M4 17h16" stroke="#3987e5" strokeWidth="1.6" strokeLinecap="round" />
-              <path
-                d="M7 4v3M7 17v3M12 4v3M12 17v3M17 4v3M17 17v3"
-                stroke="#3987e5"
-                strokeWidth="1.6"
-                strokeLinecap="round"
-              />
-            </svg>
-          </div>
-          <h1 className="text-lg font-semibold text-ink-primary text-center">Train Management System</h1>
+          <Logo height={120} className="mb-4" />
+          <h1 className="text-lg font-semibold text-ink-primary text-center">Pawl Patrol</h1>
         </div>
 
         <form
@@ -145,7 +136,7 @@ export default function LoginPage({ onLogin }) {
           </button>
         </form>
 
-        <p className="text-center text-[11px] text-ink-muted mt-5">Demo dashboard — any username and password will do.</p>
+        <p className="text-center text-[11px] text-ink-muted mt-5">Any username or password works.</p>
       </div>
     </div>
   );

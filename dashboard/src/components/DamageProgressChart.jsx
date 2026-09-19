@@ -12,7 +12,7 @@ const FAILURE_DAMAGE = 1;
 function ChartTooltip({ active, payload, label }) {
   if (!active || !payload?.length) return null;
   return (
-    <div className="rounded-md border border-line-border bg-surface-raised px-3 py-2 text-xs shadow-lg">
+    <div className="rounded-md border border-line-border bg-surface-raised px-3 py-2 text-sm shadow-lg">
       <div className="text-ink-muted mb-1">{Number(label).toFixed(0)}% of cycle</div>
       <div style={{ color: COLOR }}>Damage: {payload[0].value.toFixed(3)}</div>
     </div>
@@ -34,17 +34,17 @@ export default function DamageProgressChart({ title, subtitle, data }) {
     <Card>
       <div className="flex flex-wrap items-start justify-between gap-x-4 gap-y-1">
         <div>
-          <div className="text-sm font-medium text-ink-primary">{title}</div>
-          {subtitle && <p className="text-xs text-ink-muted mt-0.5">{subtitle}</p>}
+          <div className="text-base font-medium text-ink-primary">{title}</div>
+          {subtitle && <p className="text-sm text-ink-muted mt-0.5">{subtitle}</p>}
         </div>
-        <span className="inline-flex items-center gap-1.5 text-[11px] text-ink-muted">
+        <span className="inline-flex items-center gap-1.5 text-sm text-ink-muted">
           <span className="w-4 h-0 border-t-2 border-dashed" style={{ borderColor: THRESHOLD_COLOR }} />
           Maximum Damage Possible (Fatigue Failure)
         </span>
       </div>
 
       <div className="mt-3">
-        <ResponsiveContainer width="100%" height={260}>
+        <ResponsiveContainer width="100%" height={290}>
           <LineChart data={data} margin={{ top: 8, right: 16, left: 4, bottom: 0 }}>
             <CartesianGrid stroke={GRID} vertical={false} />
             <XAxis
@@ -52,19 +52,19 @@ export default function DamageProgressChart({ title, subtitle, data }) {
               type="number"
               domain={[0, 100]}
               tickFormatter={(v) => `${v.toFixed(0)}%`}
-              tick={{ fill: AXIS, fontSize: 11 }}
+              tick={{ fill: AXIS, fontSize: 13 }}
               axisLine={{ stroke: GRID }}
               tickLine={false}
-              height={44}
-              label={{ value: "Percentage of Cycle (%)", position: "insideBottom", offset: 2, fill: AXIS, fontSize: 11 }}
+              height={52}
+              label={{ value: "Percentage of Cycle (%)", position: "insideBottom", offset: 2, fill: AXIS, fontSize: 13 }}
             />
             <YAxis
-              tick={{ fill: AXIS, fontSize: 11 }}
+              tick={{ fill: AXIS, fontSize: 13 }}
               axisLine={{ stroke: GRID }}
               tickLine={false}
-              width={48}
+              width={58}
               domain={[0, FAILURE_DAMAGE]}
-              label={{ value: "Damage", angle: -90, position: "insideLeft", offset: 8, style: { textAnchor: "middle", fill: AXIS, fontSize: 11 } }}
+              label={{ value: "Damage", angle: -90, position: "insideLeft", offset: 8, style: { textAnchor: "middle", fill: AXIS, fontSize: 13 } }}
             />
             <Tooltip content={<ChartTooltip />} cursor={{ stroke: AXIS, strokeWidth: 1 }} />
             <ReferenceLine y={FAILURE_DAMAGE} stroke={THRESHOLD_COLOR} strokeDasharray="4 3" />

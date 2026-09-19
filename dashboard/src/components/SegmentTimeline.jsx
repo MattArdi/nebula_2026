@@ -7,13 +7,13 @@ const COLORS = { Normal: "#0ca30c", "Abnormal resistance": "#e66767" };
 const SELECT_COLOR = "#3987e5";
 
 const WIDTH = 1000;
-const HEIGHT = 175;
-const PAD_LEFT = 40; // room for "Open"/"Close" row labels
+const HEIGHT = 215;
+const PAD_LEFT = 78; // room for "Open"/"Close" row labels
 const PAD_RIGHT = 10;
-const ROW_OPEN_Y = 40;
-const ROW_CLOSE_Y = 88;
-const BAR_H = 32;
-const AXIS_Y = HEIGHT - 30;
+const ROW_OPEN_Y = 44;
+const ROW_CLOSE_Y = 108;
+const BAR_H = 42;
+const AXIS_Y = HEIGHT - 42;
 const MIN_BAR_W = 4; // real cycle durations are often sub-pixel at this scale — floor so short cycles stay visible
 
 function LegendDot({ color, label }) {
@@ -78,20 +78,20 @@ export default function SegmentTimeline({ title, subtitle, historical, xFormat, 
   return (
     <Card>
       <div className="flex flex-wrap items-center justify-between gap-2 mb-1">
-        <div className="text-sm font-medium text-ink-primary">{title}</div>
-        <div className="flex items-center gap-3 text-[11px] text-ink-muted">
+        <div className="text-base font-medium text-ink-primary">{title}</div>
+        <div className="flex items-center gap-3 text-sm text-ink-muted">
           <LegendDot color={COLORS.Normal} label="Normal" />
           <LegendDot color={COLORS["Abnormal resistance"]} label="Abnormal" />
         </div>
       </div>
-      {subtitle && <p className="text-xs text-ink-muted mb-3">{subtitle}</p>}
+      {subtitle && <p className="text-sm text-ink-muted mb-3">{subtitle}</p>}
 
       <div className="relative">
-        <svg viewBox={`0 0 ${WIDTH} ${HEIGHT}`} className="w-full" style={{ height: 175, display: "block" }}>
-          <text x={4} y={ROW_OPEN_Y + BAR_H / 2 + 4} fontSize={11} fill="#605f5a">
+        <svg viewBox={`0 0 ${WIDTH} ${HEIGHT}`} className="w-full" style={{ display: "block" }}>
+          <text x={4} y={ROW_OPEN_Y + BAR_H / 2 + 7} fontSize={21} fill="#605f5a">
             Open
           </text>
-          <text x={4} y={ROW_CLOSE_Y + BAR_H / 2 + 4} fontSize={11} fill="#605f5a">
+          <text x={4} y={ROW_CLOSE_Y + BAR_H / 2 + 7} fontSize={21} fill="#605f5a">
             Close
           </text>
 
@@ -100,7 +100,7 @@ export default function SegmentTimeline({ title, subtitle, historical, xFormat, 
           {ticks.map((t, i) => (
             <g key={i}>
               <line x1={scaleX(t)} y1={AXIS_Y} x2={scaleX(t)} y2={AXIS_Y + 4} stroke="#e3dfd3" />
-              <text x={scaleX(t)} y={AXIS_Y + 17} fontSize={10} fill="#908e87" textAnchor="middle">
+              <text x={scaleX(t)} y={AXIS_Y + 30} fontSize={20} fill="#908e87" textAnchor="middle">
                 {xFormat ? xFormat(t) : t}
               </text>
             </g>
@@ -111,7 +111,7 @@ export default function SegmentTimeline({ title, subtitle, historical, xFormat, 
 
         {hover && (
           <div
-            className="absolute pointer-events-none bg-surface-raised border border-line-border rounded-md px-2.5 py-1.5 text-[11px] shadow-xl whitespace-nowrap z-10"
+            className="absolute pointer-events-none bg-surface-raised border border-line-border rounded-md px-3 py-2 text-sm shadow-xl whitespace-nowrap z-10"
             style={{ left: `${hover.xPct}%`, top: 0, transform: "translate(-50%, -100%)" }}
           >
             <div className="font-medium" style={{ color: COLORS[hover.seg.prediction] }}>

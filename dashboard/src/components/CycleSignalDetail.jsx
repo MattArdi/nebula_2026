@@ -12,7 +12,7 @@ function ChartTooltip({ active, payload, label, unit }) {
   const actual = payload.find((p) => p.dataKey === "actual");
   const reference = payload.find((p) => p.dataKey === "reference");
   return (
-    <div className="rounded-md border border-line-border bg-surface-raised px-3 py-2 text-xs shadow-lg">
+    <div className="rounded-md border border-line-border bg-surface-raised px-3 py-2 text-sm shadow-lg">
       <div className="text-ink-muted mb-1">{label.toFixed(0)}% of cycle</div>
       {actual && (
         <div style={{ color: actual.color }}>
@@ -66,11 +66,11 @@ function SignalPanel({ segment, reference, dataKey, label, unit }) {
 
   return (
     <div>
-      <div className="text-xs text-ink-secondary mb-1">
+      <div className="text-sm text-ink-secondary mb-1">
         {label}
         {unit && <span className="text-ink-muted"> ({unit})</span>}
       </div>
-      <ResponsiveContainer width="100%" height={165}>
+      <ResponsiveContainer width="100%" height={190}>
         <ComposedChart data={data} margin={{ top: 4, right: 12, left: -12, bottom: 0 }}>
           <CartesianGrid stroke={GRID} vertical={false} />
           <XAxis
@@ -78,13 +78,13 @@ function SignalPanel({ segment, reference, dataKey, label, unit }) {
             type="number"
             domain={[0, 100]}
             tickFormatter={(v) => `${v.toFixed(0)}%`}
-            tick={{ fill: AXIS, fontSize: 10 }}
+            tick={{ fill: AXIS, fontSize: 13 }}
             axisLine={{ stroke: GRID }}
             tickLine={false}
-            height={40}
-            label={{ value: "Percentage of Cycle (%)", position: "insideBottom", offset: 2, fill: AXIS, fontSize: 10 }}
+            height={50}
+            label={{ value: "Percentage of Cycle (%)", position: "insideBottom", offset: 2, fill: AXIS, fontSize: 13 }}
           />
-          <YAxis tick={{ fill: AXIS, fontSize: 10 }} axisLine={{ stroke: GRID }} tickLine={false} width={44} domain={["auto", "auto"]} />
+          <YAxis tick={{ fill: AXIS, fontSize: 13 }} axisLine={{ stroke: GRID }} tickLine={false} width={52} domain={["auto", "auto"]} />
           <Tooltip content={<ChartTooltip unit={unit} />} cursor={{ stroke: AXIS, strokeWidth: 1 }} />
 
           {/* Stacked-area trick to shade the band between "actual" and
@@ -119,7 +119,7 @@ export default function CycleSignalDetail({ segment, normalAverage }) {
   if (!segment.rawSeries?.length) {
     return (
       <Card>
-        <div className="text-sm font-medium text-ink-primary mb-1">
+        <div className="text-base font-medium text-ink-primary mb-1">
           {segment.prediction} cycle — {formatStart(segment)}
         </div>
         <p className="text-xs text-ink-muted py-8 text-center">
@@ -133,9 +133,9 @@ export default function CycleSignalDetail({ segment, normalAverage }) {
   return (
     <Card>
       <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
-        <div className="text-sm font-medium text-ink-primary">{segment.operation} Cycle</div>
+        <div className="text-base font-medium text-ink-primary">{segment.operation} Cycle</div>
         {reference.length > 0 && (
-          <div className="flex items-center gap-3 text-[11px] text-ink-muted">
+          <div className="flex items-center gap-3 text-sm text-ink-muted">
             <span className="inline-flex items-center gap-1.5">
               <span className="w-2 h-2 rounded-full" style={{ background: color }} />
               This cycle
@@ -148,7 +148,7 @@ export default function CycleSignalDetail({ segment, normalAverage }) {
         )}
       </div>
 
-      <div className="text-xs text-ink-secondary space-y-0.5 mb-3">
+      <div className="text-sm text-ink-secondary space-y-0.5 mb-3">
         <div>Start Time: {formatClock(segment.start_ts)}</div>
         <div>End Time: {formatClock(segment.end_ts)}</div>
         <div>Total Cycle Time: {((segment.end_ts - segment.start_ts) / 1000).toFixed(2)} s</div>
