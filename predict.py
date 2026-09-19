@@ -7,8 +7,8 @@ Root pipeline — run all four subsystems' predictions from one command.
 <input.zip> must contain up to four top-level folders (any subset is
 fine — attempt whichever subsystems you like), named ACV, Door,
 Rail_Corrugation, and SHM, each holding the data to predict on for that
-subsystem — exactly what each subsystem's own v2_rule-based/run_pipeline.py
-expects as --input:
+subsystem — exactly what each subsystem's own run_pipeline.py (see
+SUBSYSTEMS below for which version) expects as --input:
 
     Door/              one continuous sensor .csv stream (like Test.csv)
     ACV/               one .xlsx case file (like acv_test_case.xlsx)
@@ -55,7 +55,7 @@ SUBSYSTEMS = {
     "Door":             {"pipeline_dir": "Door",            "version": "v2_rule-based", "output": "door_predictions.csv", "input_kind": "single_csv"},
     "ACV":              {"pipeline_dir": "ACV",              "version": "v2_rule-based", "output": "acv_predictions.csv",  "input_kind": "single_xlsx"},
     "Rail_Corrugation": {"pipeline_dir": "Rail Corrugation", "version": "v2_ensemble",   "output": "rail_predictions.csv", "input_kind": "dir"},
-    "SHM":              {"pipeline_dir": "SHM",              "version": "v2_rule-based", "output": "shm_predictions.csv",  "input_kind": "dir"},
+    "SHM":              {"pipeline_dir": "SHM",              "version": "v3_incremental", "output": "shm_predictions.csv",  "input_kind": "dir"},
 }
 
 # Accepted spellings for each subsystem's folder, inside the zip and under --data-root.
