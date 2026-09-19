@@ -9,7 +9,6 @@ import { predictDoor } from "../../lib/apiClient.js";
 import { groupDoorCycles, getOperation, parseDoorTimestamp, averageNormalCycleSignal } from "../../lib/signalResample.js";
 import { fetchAsFile } from "../../lib/sampleFiles.js";
 import { DOOR_SAMPLE } from "../../lib/sampleManifest.js";
-import { TRAIN_IDS } from "../../lib/trainIds.js";
 import { useDatasetUploads } from "../../lib/useDatasetUploads.js";
 
 // The stream's timestamps are parsed as UTC (see parseDoorTimestamp), so
@@ -184,7 +183,7 @@ export default function DoorPage({ onSummary }) {
 
   return (
     <div className="space-y-5">
-      <CurrentDatasetHeader trainNumber={TRAIN_IDS.door} />
+      <CurrentDatasetHeader id="door" />
 
       <div className="text-sm font-semibold text-ink-primary">Cycle-by-cycle Health Timeline</div>
 

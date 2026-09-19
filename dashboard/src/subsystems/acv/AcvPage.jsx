@@ -6,7 +6,6 @@ import AcvTemperatureChart from "../../components/AcvTemperatureChart.jsx";
 import { predictAcv } from "../../lib/apiClient.js";
 import { fetchAsFile } from "../../lib/sampleFiles.js";
 import { ACV_SAMPLE } from "../../lib/sampleManifest.js";
-import { TRAIN_IDS } from "../../lib/trainIds.js";
 import { useDatasetUploads } from "../../lib/useDatasetUploads.js";
 
 async function computeRun(file) {
@@ -85,7 +84,7 @@ export default function AcvPage({ onSummary }) {
 
   return (
     <div className="space-y-5">
-      <CurrentDatasetHeader trainNumber={TRAIN_IDS.acv} />
+      <CurrentDatasetHeader id="acv" />
 
       {loadError && (
         <div className="text-xs rounded-md px-3 py-2 border text-status-critical border-status-critical/40 bg-status-critical/10">

@@ -6,7 +6,6 @@ import DamageProgressChart from "../../components/DamageProgressChart.jsx";
 import { predictShm } from "../../lib/apiClient.js";
 import { fetchAsFile } from "../../lib/sampleFiles.js";
 import { SHM_SAMPLES } from "../../lib/sampleManifest.js";
-import { TRAIN_IDS } from "../../lib/trainIds.js";
 import { useDatasetUploads } from "../../lib/useDatasetUploads.js";
 
 // The backend runs rainflow counting + Miner's-rule damage directly on the
@@ -93,7 +92,7 @@ export default function ShmPage({ onSummary }) {
 
   return (
     <div className="space-y-5">
-      <CurrentDatasetHeader trainNumber={TRAIN_IDS.shm} />
+      <CurrentDatasetHeader id="shm" />
 
       {loadError && (
         <div className="text-xs rounded-md px-3 py-2 border text-status-critical border-status-critical/40 bg-status-critical/10">

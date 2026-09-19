@@ -7,7 +7,6 @@ import RailAbnormalitiesChart from "../../components/RailAbnormalitiesChart.jsx"
 import { predictRail } from "../../lib/apiClient.js";
 import { fetchAsFile } from "../../lib/sampleFiles.js";
 import { RAIL_SAMPLE_PREDICTIONS } from "../../lib/sampleManifest.js";
-import { TRAIN_IDS } from "../../lib/trainIds.js";
 import { useDatasetUploads } from "../../lib/useDatasetUploads.js";
 import { expandZipFiles } from "../../lib/zip.js";
 
@@ -208,7 +207,7 @@ export default function RailPage({ onSummary }) {
 
   return (
     <div className="space-y-5">
-      <CurrentDatasetHeader trainNumber={TRAIN_IDS.rail} />
+      <CurrentDatasetHeader id="rail" />
 
       {loadError && (
         <div className="text-xs rounded-md px-3 py-2 border text-status-critical border-status-critical/40 bg-status-critical/10">

@@ -1,5 +1,7 @@
 import { ResponsiveContainer, ScatterChart, Scatter, XAxis, YAxis, ZAxis, Tooltip, CartesianGrid, ReferenceDot } from "recharts";
 import { Card } from "./ui.jsx";
+import ScrollableChart from "./ScrollableChart.jsx";
+import { usePx } from "../lib/useRem.js";
 
 // Bottom to top: more severe sits higher.
 const LEVELS = { Normal: 0, "Side I": 1, "Side II": 2 };
@@ -7,8 +9,6 @@ const COLORS = { Normal: "#0ca30c", "Side I": "#ec835a", "Side II": "#e66767" };
 const GRID = "#e3dfd3";
 const AXIS = "#908e87";
 
-const CALLOUT_W = 176;
-const CALLOUT_H = 30;
 
 function ChartTooltip({ active, payload }) {
   if (!active || !payload?.length) return null;
@@ -25,8 +25,10 @@ function ChartTooltip({ active, payload }) {
 // dot and a callout saying which second and which issue. The callout sits
 // below the top row (there's no room above it) and hangs off whichever side
 // of the dot has room.
-function PinnedPoint({ cx, cy, point }) {
+function PinnedPoint({ cx, cy, point, px }) {
   if (cx == null || cy == null) return null;
+  const CALLOUT_W = px(176);
+  const CALLOUT_H = px(30);
   const color = COLORS[point.label];
   const below = point.level === LEVELS["Side II"];
   const y = below ? cy + 12 : cy - 12 - CALLOUT_H;
@@ -35,7 +37,7 @@ function PinnedPoint({ cx, cy, point }) {
     <g pointerEvents="none">
       <circle cx={cx} cy={cy} r={9} fill="none" stroke={color} strokeWidth={2} />
       <rect x={x} y={y} width={CALLOUT_W} height={CALLOUT_H} rx={5} fill="#ffffff" stroke={color} strokeWidth={1.5} />
-      <text x={x + CALLOUT_W / 2} y={y + CALLOUT_H / 2 + 5} textAnchor="middle" fontSize={13} fontWeight={600} fill={color}>
+      <text x={x + CALLOUT_W / 2} y={y + CALLOUT_H / 2 + 5} textAnchor="middle" fontSize={px(13)} fontWeight={600} fill={color}>
         Second {point.second} — {point.label}
       </text>
     </g>
@@ -50,6 +52,7 @@ function PinnedPoint({ cx, cy, point }) {
  * issue.
  */
 export default function RailAbnormalitiesChart({ rows, activeIndex = null }) {
+  const px = usePx();
   if (!rows?.length) return null;
 
   // Each file sits in the middle of its own slice of the recording, so a
@@ -66,7 +69,8 @@ export default function RailAbnormalitiesChart({ rows, activeIndex = null }) {
     <Card>
       <div className="text-base font-medium text-ink-primary mb-3">Abnormalities Detected</div>
 
-      <ResponsiveContainer width="100%" height={270}>
+      <ScrollableChart minWidth={px(620)}>
+<ResponsiveContainer width="100%" height={px(270)}>
         <ScatterChart margin={{ top: 12, right: 16, left: 4, bottom: 0 }}>
           <CartesianGrid stroke={GRID} vertical={false} />
           <XAxis
@@ -74,11 +78,11 @@ export default function RailAbnormalitiesChart({ rows, activeIndex = null }) {
             type="number"
             domain={[0, 100]}
             tickFormatter={(v) => `${v.toFixed(0)}%`}
-            tick={{ fill: AXIS, fontSize: 13 }}
+            tick={{ fill: AXIS, fontSize: px(13) }}
             axisLine={{ stroke: GRID }}
             tickLine={false}
-            height={52}
-            label={{ value: "Percentage of Cycle (%)", position: "insideBottom", offset: 2, fill: AXIS, fontSize: 13 }}
+            height={px(52)}
+            label={{ value: "Percentage of Cycle (%)", position: "insideBottom", offset: 2, fill: AXIS, fontSize: px(13) }}
           />
           <YAxis
             dataKey="level"
@@ -86,10 +90,10 @@ export default function RailAbnormalitiesChart({ rows, activeIndex = null }) {
             domain={[-0.5, 2.5]}
             ticks={[0, 1, 2]}
             tickFormatter={(v) => Object.keys(LEVELS)[v]}
-            tick={{ fill: AXIS, fontSize: 13 }}
+            tick={{ fill: AXIS, fontSize: px(13) }}
             axisLine={{ stroke: GRID }}
             tickLine={false}
-            width={66}
+            width={px(66)}
           />
           <ZAxis range={[50, 50]} />
           <Tooltip content={<ChartTooltip />} cursor={{ strokeDasharray: "3 3", stroke: AXIS }} />
@@ -107,11 +111,12 @@ export default function RailAbnormalitiesChart({ rows, activeIndex = null }) {
               x={active.pct}
               y={active.level}
               ifOverflow="visible"
-              shape={({ cx, cy }) => <PinnedPoint cx={cx} cy={cy} point={active} />}
+              shape={({ cx, cy }) => <PinnedPoint cx={cx} cy={cy} point={active} px={px} />}
             />
           )}
         </ScatterChart>
       </ResponsiveContainer>
+</ScrollableChart>
     </Card>
   );
 }

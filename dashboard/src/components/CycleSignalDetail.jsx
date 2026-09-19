@@ -1,6 +1,8 @@
 import { ResponsiveContainer, ComposedChart, Area, Line, XAxis, YAxis, Tooltip, CartesianGrid } from "recharts";
 import { Card } from "./ui.jsx";
+import ScrollableChart from "./ScrollableChart.jsx";
 import { resampleCycleSignal } from "../lib/signalResample.js";
+import { usePx } from "../lib/useRem.js";
 
 const STATUS_COLOR = { Normal: "#0ca30c", "Abnormal resistance": "#e66767" };
 const REFERENCE_COLOR = "#908e87";
@@ -47,6 +49,7 @@ function formatStart(segment) {
 }
 
 function SignalPanel({ segment, reference, dataKey, label, unit }) {
+  const px = usePx();
   const color = STATUS_COLOR[segment.prediction] ?? REFERENCE_COLOR;
 
   // Both series share the same 0-100% grid so the shaded band between them
@@ -70,7 +73,7 @@ function SignalPanel({ segment, reference, dataKey, label, unit }) {
         {label}
         {unit && <span className="text-ink-muted"> ({unit})</span>}
       </div>
-      <ResponsiveContainer width="100%" height={190}>
+      <ResponsiveContainer width="100%" height={px(190)}>
         <ComposedChart data={data} margin={{ top: 4, right: 12, left: -12, bottom: 0 }}>
           <CartesianGrid stroke={GRID} vertical={false} />
           <XAxis
@@ -78,13 +81,13 @@ function SignalPanel({ segment, reference, dataKey, label, unit }) {
             type="number"
             domain={[0, 100]}
             tickFormatter={(v) => `${v.toFixed(0)}%`}
-            tick={{ fill: AXIS, fontSize: 13 }}
+            tick={{ fill: AXIS, fontSize: px(13) }}
             axisLine={{ stroke: GRID }}
             tickLine={false}
-            height={50}
-            label={{ value: "Percentage of Cycle (%)", position: "insideBottom", offset: 2, fill: AXIS, fontSize: 13 }}
+            height={px(50)}
+            label={{ value: "Percentage of Cycle (%)", position: "insideBottom", offset: 2, fill: AXIS, fontSize: px(13) }}
           />
-          <YAxis tick={{ fill: AXIS, fontSize: 13 }} axisLine={{ stroke: GRID }} tickLine={false} width={52} domain={["auto", "auto"]} />
+          <YAxis tick={{ fill: AXIS, fontSize: px(13) }} axisLine={{ stroke: GRID }} tickLine={false} width={px(52)} domain={["auto", "auto"]} />
           <Tooltip content={<ChartTooltip unit={unit} />} cursor={{ stroke: AXIS, strokeWidth: 1 }} />
 
           {/* Stacked-area trick to shade the band between "actual" and
@@ -159,11 +162,13 @@ export default function CycleSignalDetail({ segment, normalAverage }) {
           Not enough Normal {segment.operation} cycles loaded yet to build a comparison baseline.
         </p>
       ) : (
+        <ScrollableChart minWidth={560}>
         <div className="space-y-4">
           <SignalPanel segment={segment} reference={reference} dataKey="current" label="Motor current" unit="mA" />
           <SignalPanel segment={segment} reference={reference} dataKey="voltage" label="Motor voltage" unit="×10mV" />
           <SignalPanel segment={segment} reference={reference} dataKey="bemf" label="Motor Electrodynamic Force" unit="" />
         </div>
+        </ScrollableChart>
       )}
     </Card>
   );

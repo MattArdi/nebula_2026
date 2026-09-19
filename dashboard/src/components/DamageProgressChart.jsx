@@ -1,5 +1,7 @@
 import { ResponsiveContainer, LineChart, Line, XAxis, YAxis, Tooltip, CartesianGrid, ReferenceLine } from "recharts";
 import { Card } from "./ui.jsx";
+import ScrollableChart from "./ScrollableChart.jsx";
+import { usePx } from "../lib/useRem.js";
 
 const COLOR = "#3987e5";
 const THRESHOLD_COLOR = "#e66767";
@@ -28,6 +30,7 @@ function ChartTooltip({ active, payload, label }) {
  * `data` is [{ pct, damage }], pct being 0-100.
  */
 export default function DamageProgressChart({ title, subtitle, data }) {
+  const px = usePx();
   if (!data?.length) return null;
 
   return (
@@ -44,7 +47,8 @@ export default function DamageProgressChart({ title, subtitle, data }) {
       </div>
 
       <div className="mt-3">
-        <ResponsiveContainer width="100%" height={290}>
+        <ScrollableChart minWidth={px(620)}>
+<ResponsiveContainer width="100%" height={px(290)}>
           <LineChart data={data} margin={{ top: 8, right: 16, left: 4, bottom: 0 }}>
             <CartesianGrid stroke={GRID} vertical={false} />
             <XAxis
@@ -52,25 +56,26 @@ export default function DamageProgressChart({ title, subtitle, data }) {
               type="number"
               domain={[0, 100]}
               tickFormatter={(v) => `${v.toFixed(0)}%`}
-              tick={{ fill: AXIS, fontSize: 13 }}
+              tick={{ fill: AXIS, fontSize: px(13) }}
               axisLine={{ stroke: GRID }}
               tickLine={false}
-              height={52}
-              label={{ value: "Percentage of Cycle (%)", position: "insideBottom", offset: 2, fill: AXIS, fontSize: 13 }}
+              height={px(52)}
+              label={{ value: "Percentage of Cycle (%)", position: "insideBottom", offset: 2, fill: AXIS, fontSize: px(13) }}
             />
             <YAxis
-              tick={{ fill: AXIS, fontSize: 13 }}
+              tick={{ fill: AXIS, fontSize: px(13) }}
               axisLine={{ stroke: GRID }}
               tickLine={false}
-              width={58}
+              width={px(58)}
               domain={[0, FAILURE_DAMAGE]}
-              label={{ value: "Damage", angle: -90, position: "insideLeft", offset: 8, style: { textAnchor: "middle", fill: AXIS, fontSize: 13 } }}
+              label={{ value: "Damage", angle: -90, position: "insideLeft", offset: 8, style: { textAnchor: "middle", fill: AXIS, fontSize: px(13) } }}
             />
             <Tooltip content={<ChartTooltip />} cursor={{ stroke: AXIS, strokeWidth: 1 }} />
             <ReferenceLine y={FAILURE_DAMAGE} stroke={THRESHOLD_COLOR} strokeDasharray="4 3" />
             <Line type="monotone" dataKey="damage" stroke={COLOR} strokeWidth={2} dot={false} isAnimationActive={false} />
           </LineChart>
         </ResponsiveContainer>
+</ScrollableChart>
       </div>
     </Card>
   );

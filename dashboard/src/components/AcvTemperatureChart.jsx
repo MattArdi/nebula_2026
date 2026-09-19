@@ -1,6 +1,8 @@
 import { useEffect, useState } from "react";
 import { ResponsiveContainer, LineChart, Line, XAxis, YAxis, Tooltip, CartesianGrid } from "recharts";
 import { Card } from "./ui.jsx";
+import ScrollableChart from "./ScrollableChart.jsx";
+import { usePx } from "../lib/useRem.js";
 
 const FAULTY_COLOR = "#e66767";
 const FLEET_COLOR = "#908e87";
@@ -33,6 +35,7 @@ function ChartTooltip({ active, payload, label, faultyCarId }) {
  * in red. `indoor` is the pipeline's diagnostics.indoor_temperature.
  */
 export default function AcvTemperatureChart({ indoor, faultyCarId }) {
+  const px = usePx();
   const [selected, setSelected] = useState(() => new Set([faultyCarId]));
 
   // A different dataset has its own faulty car and its own cars.
@@ -95,7 +98,8 @@ export default function AcvTemperatureChart({ indoor, faultyCarId }) {
         </span>
       </div>
 
-      <ResponsiveContainer width="100%" height={310}>
+      <ScrollableChart minWidth={px(620)}>
+<ResponsiveContainer width="100%" height={px(310)}>
         <LineChart data={points} margin={{ top: 8, right: 16, left: 4, bottom: 0 }}>
           <CartesianGrid stroke={GRID} vertical={false} />
           <XAxis
@@ -103,24 +107,24 @@ export default function AcvTemperatureChart({ indoor, faultyCarId }) {
             type="number"
             domain={[0, 100]}
             tickFormatter={(v) => `${v.toFixed(0)}%`}
-            tick={{ fill: AXIS, fontSize: 13 }}
+            tick={{ fill: AXIS, fontSize: px(13) }}
             axisLine={{ stroke: GRID }}
             tickLine={false}
-            height={52}
-            label={{ value: "Percentage of Cycle (%)", position: "insideBottom", offset: 2, fill: AXIS, fontSize: 13 }}
+            height={px(52)}
+            label={{ value: "Percentage of Cycle (%)", position: "insideBottom", offset: 2, fill: AXIS, fontSize: px(13) }}
           />
           <YAxis
-            tick={{ fill: AXIS, fontSize: 13 }}
+            tick={{ fill: AXIS, fontSize: px(13) }}
             axisLine={{ stroke: GRID }}
             tickLine={false}
-            width={64}
+            width={px(64)}
             domain={[(min) => Math.floor(min) - 1, (max) => Math.ceil(max) + 1]}
             label={{
               value: "Indoor Car Temperature (°C)",
               angle: -90,
               position: "insideLeft",
               offset: 4,
-              style: { textAnchor: "middle", fill: AXIS, fontSize: 13 },
+              style: { textAnchor: "middle", fill: AXIS, fontSize: px(13) },
             }}
           />
           <Tooltip content={<ChartTooltip faultyCarId={faultyCarId} />} cursor={{ stroke: AXIS, strokeWidth: 1 }} />
@@ -150,6 +154,7 @@ export default function AcvTemperatureChart({ indoor, faultyCarId }) {
           ))}
         </LineChart>
       </ResponsiveContainer>
+</ScrollableChart>
     </Card>
   );
 }
