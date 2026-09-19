@@ -40,6 +40,23 @@ def miner_proxy(x: np.ndarray, m: float = M_EXPONENT) -> float:
     return float(np.sum(counts * ranges**m))
 
 
+def damage_progress(x: np.ndarray, C: float, m: float = M_EXPONENT, n_chunks: int = 20) -> list[dict]:
+    """
+    Diagnostics only -- recomputes cumulative damage (real rainflow counting,
+    not an approximation) on `n_chunks` successively longer prefixes of the
+    raw series, for a "damage build-up over this recording" chart. The final
+    point always equals the real prediction (miner_proxy(x, m) / C), since
+    the last prefix is the whole series.
+    """
+    n = len(x)
+    points = []
+    for i in range(1, n_chunks + 1):
+        cut = max(1, int(n * i / n_chunks))
+        proxy = miner_proxy(x[:cut], m)
+        points.append({"pct": 100.0 * i / n_chunks, "damage": proxy / C})
+    return points
+
+
 def compute_train_proxies(data_dir: Path, m: float = M_EXPONENT) -> pd.DataFrame:
     """
     Rainflow + Miner's-rule proxy for every labelled training file, computed

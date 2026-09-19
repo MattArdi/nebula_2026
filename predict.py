@@ -52,7 +52,12 @@ REPO_ROOT = Path(__file__).resolve().parent
 # v2_rule-based/ does) -- swap it here to point at a different pre-built
 # pipeline without touching any orchestration logic below.
 SUBSYSTEMS = {
-    "Door":             {"pipeline_dir": "Door",            "version": "v2_rule-based", "output": "door_predictions.csv", "input_kind": "single_csv"},
+    # Door runs v3_adaptive, not v2_rule-based: verified byte-identical to
+    # v2 on real Test.csv (see backend/Door/v3_adaptive/algorithm.md
+    # Section 3.2), so this changes nothing about the submitted labels
+    # while additionally computing the low_confidence/out_of_range signals
+    # v2 doesn't have. Kept in sync with backend/api/main.py's SUBSYSTEMS.
+    "Door":             {"pipeline_dir": "Door",            "version": "v3_adaptive",   "output": "door_predictions.csv", "input_kind": "single_csv"},
     "ACV":              {"pipeline_dir": "ACV",              "version": "v2_rule-based", "output": "acv_predictions.csv",  "input_kind": "single_xlsx"},
     "Rail_Corrugation": {"pipeline_dir": "Rail Corrugation", "version": "v2_ensemble",   "output": "rail_predictions.csv", "input_kind": "dir"},
     "SHM":              {"pipeline_dir": "SHM",              "version": "v2_rule-based", "output": "shm_predictions.csv",  "input_kind": "dir"},

@@ -93,6 +93,29 @@ def primary_scores(dev_df: pd.DataFrame) -> pd.Series:
     return pd.Series({car: cusum_score(z_df[car].values) for car in dev_df.columns})
 
 
+def cusum_trajectory(z_values: np.ndarray, k: float = K_SLACK, half_life_rows: int = HALF_LIFE_ROWS) -> np.ndarray:
+    """Identical recurrence to cusum_score(), but returns the running value at
+    EVERY timestep instead of only the final one -- for diagnostics only
+    (when in the file did this car's score start climbing), never consulted
+    by rank_cars() itself."""
+    decay = 0.5 ** (1.0 / half_life_rows)
+    c = 0.0
+    out = np.empty(len(z_values))
+    for i, v in enumerate(z_values):
+        v = 0.0 if np.isnan(v) else v
+        c = max(0.0, decay * c + (v - k))
+        out[i] = c
+    return out
+
+
+def primary_trajectories(dev_df: pd.DataFrame) -> dict[str, list[float]]:
+    """Per-car CUSUM trajectory (see cusum_trajectory) for every data-bearing
+    car -- diagnostics only, not part of the ranking decision."""
+    gap_df, sigma = local_cross_sectional_gap_and_sigma(dev_df)
+    z_df = gap_df.div(sigma, axis=0)
+    return {car: cusum_trajectory(z_df[car].values).tolist() for car in dev_df.columns}
+
+
 def secondary_scores(df: pd.DataFrame, cars_with_data: list[str]) -> pd.Series:
     """Mode-transition count per car (higher = more suspicious; weak, corroborating only)."""
     car_cols = schema.parse_car_columns(df)

@@ -91,6 +91,14 @@ def parse_args() -> argparse.Namespace:
         "--quiet", action="store_true",
         help="Suppress the out-of-range / low-confidence segment tables (summary counts still print).",
     )
+    parser.add_argument(
+        "--diagnostics-output", type=Path, default=None,
+        help="Optional: write a JSON array alongside --output, one object per predicted segment "
+             "(same order), with the values classify_one() and the confidence/OOD checks already "
+             "compute but that don't belong in the submission CSV -- decision_feature, "
+             "decision_value, threshold_used, baseline_used, low_confidence, out_of_range. Purely "
+             "additive: --output's contents are identical whether or not this is passed.",
+    )
     return parser.parse_args()
 
 
@@ -217,6 +225,24 @@ def main() -> None:
     print_header("DONE")
     print(f"  Wrote {len(out_df)} predicted segments to {args.output}")
     print(f"  Columns: {list(out_df.columns)}  (matches 04_Example_Submission/door_predictions.csv)")
+
+    if args.diagnostics_output:
+        import json
+        out_of_range_rows = set(flags["segment_row"]) if not flags.empty else set()
+        diag = []
+        for idx, row in pred.iterrows():
+            decision_feature = "cur_max" if row["operation"] == "Close" else "cur_mean"
+            diag.append({
+                "operation": row["operation"],
+                "decision_feature": decision_feature,
+                "decision_value": float(row[decision_feature]),
+                "threshold_used": float(row["threshold_used"]),
+                "baseline_used": float(row["baseline_used"]),
+                "low_confidence": bool(row["low_confidence"]),
+                "out_of_range": idx in out_of_range_rows,
+            })
+        args.diagnostics_output.write_text(json.dumps(diag, indent=2))
+        print(f"  Wrote per-segment diagnostics to {args.diagnostics_output}")
 
 
 if __name__ == "__main__":

@@ -31,16 +31,26 @@ def predict_damage(x: np.ndarray, C: float, m: float = physics.M_EXPONENT) -> fl
     return physics.miner_proxy(x, m) / C
 
 
-def save_calibration(path: Path, C: float, m: float, train_proxy_range: tuple[float, float]) -> None:
-    """Serialize the single fitted constant C, the fixed exponent m, and the
-    train proxy range (for extrapolation flagging) -- everything a fresh
-    run_pipeline.py needs to predict without ever seeing training data again."""
+def save_calibration(
+    path: Path, C: float, m: float, train_proxy_range: tuple[float, float],
+    loo_mape_pct: float | None = None,
+) -> None:
+    """Serialize the single fitted constant C, the fixed exponent m, the
+    train proxy range (for extrapolation flagging), and -- if the caller
+    already ran the leave-one-out self-check -- its mean absolute
+    percentage error, so a fresh run_pipeline.py can report a prediction's
+    error band without ever re-running LOO against training data. Optional
+    and backward compatible: an artifact saved without it, or loaded by
+    older code, works exactly as before."""
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps({
+    payload = {
         "C": C, "m": m,
         "train_proxy_min": train_proxy_range[0], "train_proxy_max": train_proxy_range[1],
-    }, indent=2))
+    }
+    if loo_mape_pct is not None:
+        payload["loo_mape_pct"] = loo_mape_pct
+    path.write_text(json.dumps(payload, indent=2))
 
 
 def load_calibration(path: Path) -> dict:

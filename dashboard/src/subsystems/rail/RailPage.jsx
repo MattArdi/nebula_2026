@@ -1,7 +1,8 @@
 import { useEffect, useState } from "react";
 import Papa from "papaparse";
 import BatchSubsystemPage from "../../components/BatchSubsystemPage.jsx";
-import RailSeverityChart from "../../components/RailSeverityChart.jsx";
+import { LabelBadge } from "../../components/ui.jsx";
+import RailProbabilityChart from "../../components/RailProbabilityChart.jsx";
 import { predictRail } from "../../lib/apiClient.js";
 import { RAIL_SAMPLES, RAIL_LABELS_URL } from "../../lib/sampleManifest.js";
 
@@ -11,16 +12,16 @@ async function parseRailFile(file) {
   return file;
 }
 
-// The ensemble's own class-probability margin isn't exposed by the
-// submission CSV (file_id, prediction only), so severity here is the
-// predicted class encoded on the chart's existing +1/0/-1 scale, not a
-// continuous confidence score.
-const SEVERITY = { Normal: 0, "Side I": 1, "Side II": -1 };
-
 async function predictFile(file) {
   const result = await predictRail([file]);
   const row = result.rows[0]; // { file_id, prediction }
-  return { prediction: row.prediction, severityScore: SEVERITY[row.prediction] ?? 0 };
+  const diag = result.diagnostics?.[0]; // { probabilities, speed_kmh, worst_offender }
+  return {
+    prediction: row.prediction,
+    probabilities: diag?.probabilities ?? null,
+    speedKmh: diag?.speed_kmh ?? null,
+    worstOffender: diag?.worst_offender ?? null,
+  };
 }
 
 function computeStats(results) {
@@ -61,11 +62,21 @@ function computeEntities(results) {
   }));
 }
 
+function renderCell(row) {
+  const topProb = row.probabilities?.[row.prediction];
+  return (
+    <span className="inline-flex items-center gap-2">
+      <LabelBadge label={row.prediction} />
+      {topProb != null && <span className="text-xs text-ink-muted tabular-nums">{(topProb * 100).toFixed(0)}%</span>}
+    </span>
+  );
+}
+
 function renderCombined(results) {
   return (
-    <RailSeverityChart
-      title="All files — Side I / Side II severity"
-      subtitle="Every loaded file as one bar: height is the predicted class (+1 Side I, 0 Normal, −1 Side II)."
+    <RailProbabilityChart
+      title="All files — class probability"
+      subtitle="Every loaded file's real ensemble output: P(Normal) / P(Side I) / P(Side II), stacked to 100%, not a hard label."
       results={results}
       caveat="Each file is an isolated 1-second snapshot — bars are ordered by load order only, not a real timeline."
     />
@@ -116,6 +127,7 @@ export default function RailPage({ onSummary }) {
       computeStats={computeStats}
       computeHealth={computeHealth}
       computeEntities={computeEntities}
+      renderCell={renderCell}
       renderCombined={renderCombined}
       onSummary={onSummary}
     />

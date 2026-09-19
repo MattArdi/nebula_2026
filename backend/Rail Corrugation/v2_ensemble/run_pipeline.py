@@ -82,6 +82,15 @@ def parse_args() -> argparse.Namespace:
         help="Retrain from --data-dir instead of loading saved weights, and overwrite --weights-dir "
              "with the result. Requires --data-dir.",
     )
+    parser.add_argument(
+        "--diagnostics-output", type=Path, default=None,
+        help="Optional: write a JSON array alongside --output, one object per file (same order), "
+             "with values the pipeline already computes but that don't belong in the submission "
+             "CSV -- the ensemble's own class probabilities (predict_proba, already fitted, just "
+             "not exposed by .predict()), speed_kmh, and which (car, bearing position) is the "
+             "worst offender on each side. Purely additive: --output's contents are identical "
+             "whether or not this is passed.",
+    )
     return parser.parse_args()
 
 
@@ -176,6 +185,22 @@ def main() -> None:
     print_header("DONE")
     print(f"  Wrote {len(pred_df)} predictions to {args.output}")
     print(f"  Columns: {list(pred_df.columns)}  (matches 04_Example_Submission/rail_predictions.csv)")
+
+    if args.diagnostics_output:
+        import json
+        proba = ensemble.predict_proba(X_input)
+        classes = ensemble.label_encoder.classes_.tolist()
+        diag = []
+        for i, f in enumerate(files):
+            _, sensor_matrix = feat_mod.load_file(f)
+            diag.append({
+                "file_id": f.name,
+                "probabilities": {cls: float(proba[i, j]) for j, cls in enumerate(classes)},
+                "speed_kmh": float(X_input[i, feat_mod.FEATURE_NAMES.index("speed_kmh")]),
+                "worst_offender": feat_mod.worst_offender(sensor_matrix),
+            })
+        args.diagnostics_output.write_text(json.dumps(diag, indent=2))
+        print(f"  Wrote per-file diagnostics to {args.diagnostics_output}")
 
 
 if __name__ == "__main__":

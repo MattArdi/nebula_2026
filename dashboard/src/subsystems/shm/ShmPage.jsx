@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import Papa from "papaparse";
 import BatchSubsystemPage from "../../components/BatchSubsystemPage.jsx";
 import ShmCombinedChart from "../../components/ShmCombinedChart.jsx";
+import DamageProgressChart from "../../components/DamageProgressChart.jsx";
 import { predictShm } from "../../lib/apiClient.js";
 import { SHM_SAMPLES, SHM_LABELS_URL } from "../../lib/sampleManifest.js";
 
@@ -14,7 +15,15 @@ async function parseShmFile(file) {
 async function predictFile(file) {
   const result = await predictShm([file]);
   const row = result.rows[0]; // { file_id, prediction }
-  return { prediction: row.prediction };
+  const diag = result.diagnostics?.[0]; // { remaining_life_pct, error_band_pct, extrapolation_*, damage_progress }
+  return {
+    prediction: row.prediction,
+    remainingLifePct: diag?.remaining_life_pct ?? null,
+    errorBandPct: diag?.error_band_pct ?? null,
+    extrapolationFlagged: diag?.extrapolation_flagged ?? false,
+    extrapolationReason: diag?.extrapolation_reason ?? null,
+    damageProgress: diag?.damage_progress ?? null,
+  };
 }
 
 function tierFor(damage) {
@@ -35,15 +44,20 @@ function matchesTrueLabel(prediction, trueLabel) {
 function computeStats(results) {
   const values = results.map((r) => Number(r.prediction));
   const avg = values.reduce((a, b) => a + b, 0) / values.length;
+  const avgRemaining = results.reduce((sum, r) => sum + (r.remainingLifePct ?? (1 - Number(r.prediction)) * 100), 0) / results.length;
   const high = values.filter((v) => v >= 0.6).length;
   const medium = values.filter((v) => v >= 0.3 && v < 0.6).length;
+  const extrapolated = results.filter((r) => r.extrapolationFlagged).length;
   const withTruth = results.filter((r) => r.trueLabel != null);
   const stats = [
     { label: "Files", value: results.length },
-    { label: "Avg. predicted damage", value: avg.toFixed(3) },
+    { label: "Avg. fatigue life remaining", value: `${avgRemaining.toFixed(0)}%`, tone: avgRemaining < 40 ? "critical" : avgRemaining < 70 ? "serious" : "good" },
     { label: "Medium damage", value: medium, tone: medium > 0 ? "serious" : "good" },
     { label: "High damage", value: high, tone: high > 0 ? "critical" : "good" },
   ];
+  if (extrapolated > 0) {
+    stats.push({ label: "Extrapolated (outside Train's range)", value: extrapolated, tone: "serious" });
+  }
   if (withTruth.length) {
     const avgErrorPct =
       (withTruth.reduce((sum, r) => sum + Math.abs(Number(r.prediction) - Number(r.trueLabel)) / Math.max(1e-9, Math.abs(Number(r.trueLabel))), 0) /
@@ -54,23 +68,19 @@ function computeStats(results) {
   return stats;
 }
 
-// Health = (1 - average predicted damage) * 100 — damage is already on a
-// physically meaningful 0-1 scale where 1.0 means fatigue failure per
-// Miner's rule, so this falls straight out of the model with no invented
-// scaling. Clamped since a (rare, off-scale) prediction above 1.0 shouldn't
-// go negative.
+// Health = fatigue life remaining, the same (1-damage)*100 the backend now
+// computes directly (damage is already on a physically meaningful 0-1
+// scale where 1.0 means fatigue failure per Miner's rule).
 function computeHealth(results) {
-  const values = results.map((r) => Number(r.prediction));
-  const avg = values.reduce((a, b) => a + b, 0) / values.length;
-  return Math.max(0, (1 - avg) * 100);
+  const values = results.map((r) => r.remainingLifePct ?? (1 - Number(r.prediction)) * 100);
+  return values.reduce((a, b) => a + b, 0) / values.length;
 }
 
-// Per-file health, same (1-damage)*100 conversion as the aggregate.
 function computeEntities(results) {
   return results.map((r) => ({
     id: r.file_id,
     label: tierFor(Number(r.prediction)).label,
-    value: Math.max(0, (1 - Number(r.prediction)) * 100),
+    value: r.remainingLifePct ?? Math.max(0, (1 - Number(r.prediction)) * 100),
     valueType: "health",
   }));
 }
@@ -78,11 +88,46 @@ function computeEntities(results) {
 function renderCell(row) {
   const damage = Number(row.prediction);
   const tier = tierFor(damage);
+  const remaining = row.remainingLifePct;
   return (
     <span className="inline-flex items-center gap-2">
-      <span className={`font-semibold tabular-nums ${tier.tone}`}>{row.prediction}</span>
-      <span className="text-xs text-ink-muted">{tier.label}</span>
+      {remaining != null ? (
+        <>
+          <span className={`font-semibold tabular-nums ${tier.tone}`}>{remaining.toFixed(0)}% life remaining</span>
+          {row.errorBandPct != null && <span className="text-xs text-ink-muted">(± {row.errorBandPct.toFixed(1)}%)</span>}
+        </>
+      ) : (
+        <span className={`font-semibold tabular-nums ${tier.tone}`}>{row.prediction}</span>
+      )}
+      <span className="text-xs text-ink-muted">{tier.label} damage</span>
+      {row.extrapolationFlagged && <span className="text-xs text-status-warning">extrapolated</span>}
     </span>
+  );
+}
+
+function renderDetail(row) {
+  if (!row.damageProgress?.length) return null;
+  const points = row.damageProgress.map((p) => ({ x: p.pct / 100, y: p.damage }));
+  const truthNote =
+    row.trueLabel != null
+      ? ` True damage (Train_Labels.csv): ${row.trueLabel} — predicted ${row.prediction} (${row.matchesTruth ? "within 15%" : "off by more than 15%"}).`
+      : "";
+  const remaining = row.remainingLifePct;
+  const errorBand = row.errorBandPct;
+
+  return (
+    <DamageProgressChart
+      title={`${row.file_id} — cumulative damage build-up`}
+      subtitle={`Fatigue life remaining: ${remaining != null ? remaining.toFixed(0) : "—"}%${
+        errorBand != null ? ` (± ${errorBand.toFixed(1)}%, from the shipped calibration's leave-one-out error)` : ""
+      }. Real rainflow counting recomputed on successively longer prefixes of this recording.${truthNote}`}
+      data={points}
+      caveat={
+        row.extrapolationFlagged
+          ? `Extrapolation: ${row.extrapolationReason}`
+          : "X-axis is fraction of this recording elapsed, not real time — SHM's sampling rate isn't published."
+      }
+    />
   );
 }
 
@@ -125,8 +170,9 @@ export default function ShmPage({ onSummary }) {
         <>
           Drop one or many dynamic-stress time-series files (e.g. <code className="text-ink-secondary">train01.csv</code>
           ...<code className="text-ink-secondary">train64.csv</code>, or a .zip of several). Each file runs through
-          the real validated pipeline (rainflow cycle counting + Miner's linear damage rule) to predict a cumulative
-          fatigue-damage number. Check against{" "}
+          the real validated pipeline (rainflow cycle counting + Miner's linear damage rule) to predict cumulative
+          fatigue damage, shown as % of fatigue life remaining with an error band from the calibration's own
+          leave-one-out cross-validation. Click a row for that file's real damage build-up curve. Check against{" "}
           <code className="text-ink-secondary">Train_Labels.csv</code> by dropping Train files, or drop Test files
           for a real submission-ready run.
         </>
@@ -135,7 +181,7 @@ export default function ShmPage({ onSummary }) {
       accept=".csv"
       parseFile={parseShmFile}
       predictFile={predictFile}
-      predictionHeader="Predicted damage"
+      predictionHeader="Fatigue life remaining"
       sampleFiles={SHM_SAMPLES}
       trueLabels={trueLabels}
       matchesTrueLabel={matchesTrueLabel}
@@ -144,6 +190,7 @@ export default function ShmPage({ onSummary }) {
       computeEntities={computeEntities}
       renderCell={renderCell}
       renderCombined={renderCombined}
+      renderDetail={renderDetail}
       onSummary={onSummary}
     />
   );

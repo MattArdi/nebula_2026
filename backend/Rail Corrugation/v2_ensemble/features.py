@@ -97,6 +97,31 @@ def extract_from_path(path) -> dict:
     return extract_features(speed_kmh, sensor_matrix)
 
 
+def worst_offender(sensor_matrix: np.ndarray) -> dict:
+    """
+    Diagnostics only -- never fed to the model. `extract_features()` pools
+    vibration RMS across all 4 bearing positions on a side before the model
+    ever sees it (side1_vib_rms_max etc.), which is exactly the pooling
+    that discards which car/position produced that max. This recovers it:
+    per side, the single (car, position) whose vibration RMS is the
+    highest -- the same statistic CatBoost/XGBoost rank as their single
+    most important feature (see algorithm.md Section 2).
+    """
+    vib = sensor_matrix[:, :, :, 0]  # (10000, 8 car, 8 pos)
+    vib_rms = np.sqrt(np.mean(vib ** 2, axis=0))  # (8 car, 8 pos)
+
+    out = {}
+    for side_name, pos_idx in [("side1", SIDE1_IDX), ("side2", SIDE2_IDX)]:
+        sub = vib_rms[:, pos_idx]  # (8 car, 4 pos)
+        car_i, pos_j = np.unravel_index(np.argmax(sub), sub.shape)
+        out[side_name] = {
+            "car": int(car_i) + 1,
+            "position": int(pos_idx[pos_j]) + 1,
+            "vib_rms": float(sub[car_i, pos_j]),
+        }
+    return out
+
+
 def _feature_names() -> list[str]:
     """Feature key order, derived once from a small dummy (non-degenerate) input."""
     rng = np.random.RandomState(0)

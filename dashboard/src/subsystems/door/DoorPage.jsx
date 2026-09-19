@@ -3,6 +3,7 @@ import Papa from "papaparse";
 import { FileDrop, PrimaryButton, Card, StatCard, LabelBadge } from "../../components/ui.jsx";
 import SegmentTimeline from "../../components/SegmentTimeline.jsx";
 import CycleSignalDetail from "../../components/CycleSignalDetail.jsx";
+import DoorThresholdChart from "../../components/DoorThresholdChart.jsx";
 import { downloadCsvText } from "../../lib/csvExport.js";
 import { predictDoor } from "../../lib/apiClient.js";
 import { groupDoorCycles, getOperation, parseDoorTimestamp, averageNormalCycleSignal } from "../../lib/signalResample.js";
@@ -65,17 +66,29 @@ export default function DoorPage({ onSummary }) {
           // have a raw signal to chart and to read the Open/Close flag off.
           const [backendResult, truth] = await Promise.all([predictDoor(file), fetchGroundTruth()]);
           const predicted = backendResult.rows; // [{ start_time, end_time, prediction }]
+          const diagnostics = backendResult.diagnostics ?? []; // per-segment, same order as `rows`
           const cycles = groupDoorCycles(results.data);
 
           const alignedByCount = cycles.length === predicted.length;
           const segs = predicted.map((p, i) => {
             const chunk = alignedByCount ? cycles[i] : null;
+            const diag = diagnostics[i] ?? null;
             return {
               ...p,
               start_ts: parseDoorTimestamp(p.start_time),
               end_ts: parseDoorTimestamp(p.end_time),
-              operation: chunk ? getOperation(chunk) : null,
+              // The backend's own operation flag is authoritative — prefer
+              // it over the client-side chunk guess, which only exists for
+              // charting and can miss on an edge case even when the count
+              // lines up.
+              operation: diag?.operation ?? (chunk ? getOperation(chunk) : null),
               rawSeries: chunk,
+              decisionFeature: diag?.decision_feature ?? null,
+              decisionValue: diag?.decision_value ?? null,
+              thresholdUsed: diag?.threshold_used ?? null,
+              baselineUsed: diag?.baseline_used ?? null,
+              lowConfidence: diag?.low_confidence ?? false,
+              outOfRange: diag?.out_of_range ?? false,
             };
           });
 
@@ -216,6 +229,13 @@ export default function DoorPage({ onSummary }) {
           />
 
           {selectedCycle && <CycleSignalDetail segment={selectedCycle} normalAverage={normalAverage} />}
+
+          <DoorThresholdChart
+            title="Decision value vs. threshold, in cycle order"
+            subtitle="Every cycle's real current reading against the threshold it was judged against — a value creeping toward the line across successive cycles is visible here before it actually crosses."
+            segments={segments}
+            caveat="From the deployed v3_adaptive pipeline's own diagnostics — the threshold and confidence checks it already computes, not re-derived client-side."
+          />
         </>
       )}
 
@@ -250,6 +270,7 @@ export default function DoorPage({ onSummary }) {
                   <th className="px-4 py-2 font-normal">Start time</th>
                   <th className="px-4 py-2 font-normal">End time</th>
                   <th className="px-4 py-2 font-normal">Prediction</th>
+                  <th className="px-4 py-2 font-normal">Confidence</th>
                   {groundTruth && <th className="px-4 py-2 font-normal">True label</th>}
                 </tr>
               </thead>
@@ -264,6 +285,21 @@ export default function DoorPage({ onSummary }) {
                       <td className="px-4 py-2 text-ink-secondary tabular-nums">{s.end_time}</td>
                       <td className="px-4 py-2">
                         <LabelBadge label={s.prediction} />
+                      </td>
+                      <td className="px-4 py-2">
+                        <div className="flex items-center gap-1.5">
+                          {s.lowConfidence && (
+                            <span className="text-[11px] text-status-warning" title="Within the bootstrap confidence half-width of the threshold — a close call.">
+                              Low confidence
+                            </span>
+                          )}
+                          {s.outOfRange && (
+                            <span className="text-[11px] text-status-critical" title="Outside anything Train ever demonstrated for this operation.">
+                              Out of range
+                            </span>
+                          )}
+                          {!s.lowConfidence && !s.outOfRange && <span className="text-[11px] text-ink-muted">—</span>}
+                        </div>
                       </td>
                       {groundTruth && (
                         <td className="px-4 py-2">

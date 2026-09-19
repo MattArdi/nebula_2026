@@ -47,6 +47,7 @@ import pandas as pd
 sys.path.insert(0, str(Path(__file__).parent))
 import diagnostics
 import ranking
+import schema
 
 DEFAULT_ARTIFACTS_PATH = Path(__file__).parent / "artifacts" / "train_margins.json"
 
@@ -77,6 +78,15 @@ def parse_args() -> argparse.Namespace:
         "--retrain", action="store_true",
         help="Recompute training margins from --data-dir instead of loading the shipped set, and "
              "overwrite --artifacts-path with the result. Requires --data-dir.",
+    )
+    parser.add_argument(
+        "--diagnostics-output", type=Path, default=None,
+        help="Optional: write a JSON object alongside --output with the per-car breakdown "
+             "rank_cars() already computes but that doesn't belong in the submission CSV -- "
+             "primary/secondary score and rank per car, the top-vs-runner-up margin and its "
+             "flagged-thin verdict, and each data-bearing car's full CUSUM trajectory (for a "
+             "'when did this car's score start climbing' chart). Purely additive: --output's "
+             "contents are identical whether or not this is passed.",
     )
     return parser.parse_args()
 
@@ -164,6 +174,29 @@ def main() -> None:
     print_header("DONE")
     print(f"  Wrote prediction for {input_path.name} to {args.output}")
     print(f"  Columns: {list(out_df.columns)}  (matches 04_Example_Submission/acv_predictions.csv)")
+
+    if args.diagnostics_output:
+        import json
+        dev_df, _ = schema.build_deviation_frame(df_input)
+        trajectories = ranking.primary_trajectories(dev_df) if not dev_df.empty else {}
+        cars = [
+            {
+                "id": car,
+                "rank": rank,
+                "primary_score": float(result["primary"][car]) if car in result["primary"] else None,
+                "secondary_score": float(result["secondary"][car]) if car in result["secondary"] and pd.notna(result["secondary"][car]) else None,
+            }
+            for rank, car in enumerate(result["ranked"], start=1)
+        ]
+        diag = {
+            "cars": cars,
+            "margin": None if pd.isna(mr["margin"]) else float(mr["margin"]),
+            "margin_flagged": bool(mr["flagged"]),
+            "margin_reason": mr["reason"],
+            "trajectories": trajectories,
+        }
+        args.diagnostics_output.write_text(json.dumps(diag, indent=2))
+        print(f"  Wrote per-car diagnostics to {args.diagnostics_output}")
 
 
 if __name__ == "__main__":

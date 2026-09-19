@@ -15,6 +15,7 @@ Run:
     uvicorn backend.api.main:app --reload --port 8000
 """
 
+import json
 import shutil
 import subprocess
 import sys
@@ -27,10 +28,15 @@ from fastapi.middleware.cors import CORSMiddleware
 
 REPO_ROOT = Path(__file__).resolve().parent.parent.parent
 
-# Mirrors predict.py's SUBSYSTEMS config exactly, so the dashboard and the
-# CLI submission path (predict.py) always run the same pipeline version.
+# Mirrors predict.py's SUBSYSTEMS config, so the dashboard and the CLI
+# submission path (predict.py) always run the same pipeline version --
+# except Door, deliberately: v3_adaptive is byte-identical to v2_rule-based
+# on real Test.csv (verified; see backend/Door/v3_adaptive/algorithm.md
+# Section 3.2), so running it here costs nothing and unlocks the
+# low_confidence/out_of_range diagnostics v2 doesn't compute. predict.py's
+# own SUBSYSTEMS config was updated to match, for the same reason.
 SUBSYSTEMS = {
-    "door": {"pipeline_dir": "Door", "version": "v2_rule-based",
+    "door": {"pipeline_dir": "Door", "version": "v3_adaptive",
               "output": "door_predictions.csv", "input_kind": "single"},
     "acv": {"pipeline_dir": "ACV", "version": "v2_rule-based",
              "output": "acv_predictions.csv", "input_kind": "single"},
@@ -71,8 +77,13 @@ def _run_subsystem(key: str, files: list[UploadFile]) -> dict:
 
         input_path = (input_dir / Path(files[0].filename).name) if cfg["input_kind"] == "single" else input_dir
         output_path = tmp_path / cfg["output"]
+        diagnostics_path = tmp_path / "diagnostics.json"
 
-        cmd = [sys.executable, str(pipeline_script), "--input", str(input_path), "--output", str(output_path)]
+        cmd = [
+            sys.executable, str(pipeline_script),
+            "--input", str(input_path), "--output", str(output_path),
+            "--diagnostics-output", str(diagnostics_path),
+        ]
         result = subprocess.run(cmd, capture_output=True, text=True, cwd=str(pipeline_script.parent))
 
         if result.returncode != 0 or not output_path.exists():
@@ -84,12 +95,18 @@ def _run_subsystem(key: str, files: list[UploadFile]) -> dict:
 
         df = pd.read_csv(output_path)
         csv_text = output_path.read_text()
+        # Diagnostic fields the pipeline already computes but that don't
+        # belong in the submission CSV (see each subsystem's algorithm.md
+        # Section 4/5, "Explainability") -- never affects `csv`/`rows`
+        # above, which are exactly what predict.py would produce.
+        diagnostics = json.loads(diagnostics_path.read_text()) if diagnostics_path.exists() else None
 
     return {
         "columns": df.columns.tolist(),
         "rows": df.to_dict(orient="records"),
         "csv": csv_text,
         "filename": cfg["output"],
+        "diagnostics": diagnostics,
         "log_tail": result.stdout[-2000:],
     }
 
