@@ -10,10 +10,11 @@ import { RAIL_SAMPLE_PREDICTIONS } from "../../lib/sampleManifest.js";
 import { useDatasetUploads } from "../../lib/useDatasetUploads.js";
 import { expandZipFiles } from "../../lib/zip.js";
 
-// Files per backend request — each is ~17 MB, so this keeps a single
-// request modest while still paying the pipeline's startup cost only once
-// per chunk instead of once per file.
-const CHUNK_SIZE = 5;
+// Files per backend request. Cloud Run hard-caps request size at 32 MB
+// (not configurable), and each Rail file averages ~17 MB (max ~17.5 MB) --
+// 2 files already risks exceeding that limit and getting a 413 back, so
+// this must stay at 1 despite the extra per-chunk pipeline-startup cost.
+const CHUNK_SIZE = 1;
 
 const naturalCompare = (a, b) => a.localeCompare(b, undefined, { numeric: true });
 
