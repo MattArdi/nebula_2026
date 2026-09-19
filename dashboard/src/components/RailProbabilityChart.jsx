@@ -2,8 +2,8 @@ import { ResponsiveContainer, ComposedChart, Bar, XAxis, YAxis, Tooltip, Cartesi
 import { Card } from "./ui.jsx";
 
 const COLORS = { Normal: "#0ca30c", "Side I": "#e66767", "Side II": "#3987e5" };
-const GRID = "#2c2c2a";
-const AXIS = "#898781";
+const GRID = "#e3dfd3";
+const AXIS = "#908e87";
 
 function ChartTooltip({ active, payload }) {
   if (!active || !payload?.length) return null;
@@ -89,7 +89,7 @@ export default function RailProbabilityChart({ title, subtitle, results, caveat 
             domain={[0, 1]}
             tickFormatter={(v) => `${(v * 100).toFixed(0)}%`}
           />
-          <Tooltip content={<ChartTooltip />} cursor={{ fill: "rgba(255,255,255,0.04)" }} />
+          <Tooltip content={<ChartTooltip />} cursor={{ fill: "rgba(35,35,34,0.04)" }} />
           <Bar dataKey="Normal" stackId="p" fill={COLORS.Normal} isAnimationActive={false} />
           <Bar dataKey="Side I" stackId="p" fill={COLORS["Side I"]} isAnimationActive={false} />
           <Bar dataKey="Side II" stackId="p" fill={COLORS["Side II"]} radius={[3, 3, 0, 0]} isAnimationActive={false} />

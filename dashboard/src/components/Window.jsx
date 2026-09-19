@@ -169,7 +169,7 @@ export default function Window({
           onMouseDown={startResize}
           title="Resize"
           className="absolute bottom-0 right-0 w-4 h-4 cursor-nwse-resize"
-          style={{ background: "linear-gradient(135deg, transparent 50%, rgba(255,255,255,0.25) 50%)" }}
+          style={{ background: "linear-gradient(135deg, transparent 50%, rgba(35,35,34,0.25) 50%)" }}
         />
       )}
     </div>

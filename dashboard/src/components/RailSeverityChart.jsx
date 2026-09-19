@@ -2,8 +2,8 @@ import { ResponsiveContainer, ComposedChart, Bar, Cell, XAxis, YAxis, Tooltip, C
 import { Card } from "./ui.jsx";
 
 const COLORS = { Normal: "#0ca30c", "Side I": "#e66767", "Side II": "#3987e5" };
-const GRID = "#2c2c2a";
-const AXIS = "#898781";
+const GRID = "#e3dfd3";
+const AXIS = "#908e87";
 
 function ChartTooltip({ active, payload }) {
   if (!active || !payload?.length) return null;
@@ -81,11 +81,11 @@ export default function RailSeverityChart({ title, subtitle, results, caveat }) 
             domain={[-1, 1]}
             label={{ value: "← Side II   Side I →", angle: -90, position: "insideLeft", fill: AXIS, fontSize: 10 }}
           />
-          <Tooltip content={<ChartTooltip />} cursor={{ fill: "rgba(255,255,255,0.04)" }} />
-          <ReferenceLine y={0} stroke="#c3c2b7" strokeWidth={1} />
+          <Tooltip content={<ChartTooltip />} cursor={{ fill: "rgba(35,35,34,0.04)" }} />
+          <ReferenceLine y={0} stroke="#605f5a" strokeWidth={1} />
           <Bar dataKey="severityScore" radius={[3, 3, 3, 3]} isAnimationActive={false}>
             {data.map((d, i) => (
-              <Cell key={i} fill={COLORS[d.prediction] ?? "#898781"} />
+              <Cell key={i} fill={COLORS[d.prediction] ?? "#908e87"} />
             ))}
           </Bar>
         </ComposedChart>

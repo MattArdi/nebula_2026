@@ -3,8 +3,8 @@ import { Card } from "./ui.jsx";
 
 const COLOR = "#3987e5";
 const THRESHOLD_COLOR = "#e66767";
-const GRID = "#2c2c2a";
-const AXIS = "#898781";
+const GRID = "#e3dfd3";
+const AXIS = "#908e87";
 
 function ChartTooltip({ active, payload, label }) {
   if (!active || !payload?.length) return null;

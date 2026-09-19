@@ -3,9 +3,9 @@ import { Card } from "./ui.jsx";
 import { resampleCycleSignal } from "../lib/signalResample.js";
 
 const STATUS_COLOR = { Normal: "#0ca30c", "Abnormal resistance": "#e66767" };
-const REFERENCE_COLOR = "#898781";
-const GRID = "#2c2c2a";
-const AXIS = "#898781";
+const REFERENCE_COLOR = "#908e87";
+const GRID = "#e3dfd3";
+const AXIS = "#908e87";
 
 function ChartTooltip({ active, payload, label, unit }) {
   if (!active || !payload?.length) return null;

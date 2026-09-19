@@ -2,11 +2,11 @@ import { ResponsiveContainer, ComposedChart, Area, Line, XAxis, YAxis, Tooltip, 
 import { Card } from "./ui.jsx";
 
 const INDOOR_COLOR = "#3987e5";
-const OUTDOOR_COLOR = "#898781";
+const OUTDOOR_COLOR = "#908e87";
 const FAULT_COLOR = "#e66767";
 const OK_COLOR = "#0ca30c";
-const GRID = "#2c2c2a";
-const AXIS = "#898781";
+const GRID = "#e3dfd3";
+const AXIS = "#908e87";
 
 function ChartTooltip({ active, payload, label }) {
   if (!active || !payload?.length) return null;

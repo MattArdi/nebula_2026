@@ -5,19 +5,19 @@ export default {
     extend: {
       colors: {
         surface: {
-          page: "#0d0d0d",
-          card: "#1a1a19",
-          raised: "#232322",
+          page: "#fdf9eb",
+          card: "#ffffff",
+          raised: "#f3eedd",
         },
         ink: {
-          primary: "#ffffff",
-          secondary: "#c3c2b7",
-          muted: "#898781",
+          primary: "#232322",
+          secondary: "#605f5a",
+          muted: "#908e87",
         },
         line: {
-          hairline: "#2c2c2a",
-          baseline: "#383835",
-          border: "rgba(255,255,255,0.10)",
+          hairline: "#e3dfd3",
+          baseline: "#d1cec3",
+          border: "rgba(35,35,34,0.14)",
         },
         status: {
           good: "#0ca30c",

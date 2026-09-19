@@ -53,7 +53,7 @@ export default function SegmentTimeline({ title, subtitle, historical, xFormat, 
     const x2 = scaleX(seg.end_ts);
     const w = Math.max(MIN_BAR_W, x2 - x1);
     const rowY = seg.operation === "Close" ? ROW_CLOSE_Y : ROW_OPEN_Y;
-    const color = COLORS[seg.prediction] ?? "#898781";
+    const color = COLORS[seg.prediction] ?? "#908e87";
     const isSelected = selected === seg;
     return (
       <rect
@@ -88,19 +88,19 @@ export default function SegmentTimeline({ title, subtitle, historical, xFormat, 
 
       <div className="relative">
         <svg viewBox={`0 0 ${WIDTH} ${HEIGHT}`} className="w-full" style={{ height: 175, display: "block" }}>
-          <text x={4} y={ROW_OPEN_Y + BAR_H / 2 + 4} fontSize={11} fill="#c3c2b7">
+          <text x={4} y={ROW_OPEN_Y + BAR_H / 2 + 4} fontSize={11} fill="#605f5a">
             Open
           </text>
-          <text x={4} y={ROW_CLOSE_Y + BAR_H / 2 + 4} fontSize={11} fill="#c3c2b7">
+          <text x={4} y={ROW_CLOSE_Y + BAR_H / 2 + 4} fontSize={11} fill="#605f5a">
             Close
           </text>
 
-          <line x1={PAD_LEFT} y1={AXIS_Y} x2={WIDTH - PAD_RIGHT} y2={AXIS_Y} stroke="#2c2c2a" strokeWidth={1} />
+          <line x1={PAD_LEFT} y1={AXIS_Y} x2={WIDTH - PAD_RIGHT} y2={AXIS_Y} stroke="#e3dfd3" strokeWidth={1} />
 
           {ticks.map((t, i) => (
             <g key={i}>
-              <line x1={scaleX(t)} y1={AXIS_Y} x2={scaleX(t)} y2={AXIS_Y + 4} stroke="#2c2c2a" />
-              <text x={scaleX(t)} y={AXIS_Y + 17} fontSize={10} fill="#898781" textAnchor="middle">
+              <line x1={scaleX(t)} y1={AXIS_Y} x2={scaleX(t)} y2={AXIS_Y + 4} stroke="#e3dfd3" />
+              <text x={scaleX(t)} y={AXIS_Y + 17} fontSize={10} fill="#908e87" textAnchor="middle">
                 {xFormat ? xFormat(t) : t}
               </text>
             </g>
