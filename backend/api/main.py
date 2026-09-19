@@ -25,8 +25,14 @@ from pathlib import Path
 import pandas as pd
 from fastapi import FastAPI, File, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 
 REPO_ROOT = Path(__file__).resolve().parent.parent.parent
+# Only present in the deployed container (see Dockerfile: the frontend build
+# output is copied here) -- absent in local dev, where the dashboard runs
+# under `npm run dev` on its own port instead. Mounted, if present, after
+# every /api/* route below, so it never shadows them.
+STATIC_DIR = REPO_ROOT / "static"
 
 # Mirrors predict.py's SUBSYSTEMS config, so the dashboard and the CLI
 # submission path (predict.py) always run the same pipeline version --
@@ -49,7 +55,12 @@ SUBSYSTEMS = {
 app = FastAPI(title="PS3 Condition Monitoring API")
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # local-only dev server, not deployed publicly
+    # Wildcard is harmless here: the deployed frontend calls this API
+    # same-origin (see STATIC_DIR below), so CORS only matters for someone
+    # calling the API directly from a browser on another origin, which
+    # carries no more exposure than the API already has with no auth of
+    # its own -- the dashboard's login gate is client-side only.
+    allow_origins=["*"],
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -134,3 +145,10 @@ async def predict_rail(files: list[UploadFile] = File(...)):
 @app.post("/api/shm/predict")
 async def predict_shm(files: list[UploadFile] = File(...)):
     return _run_subsystem("shm", files)
+
+
+# Registered last: this app has no client-side routing (no react-router),
+# so serving the built dashboard is just `index.html` + its assets -- no
+# catch-all/SPA-fallback route needed. html=True serves index.html at "/".
+if STATIC_DIR.is_dir():
+    app.mount("/", StaticFiles(directory=STATIC_DIR, html=True), name="static")

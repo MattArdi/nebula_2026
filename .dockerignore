@@ -1,0 +1,24 @@
+# Not needed at runtime: the deployed API never passes --data-dir (it
+# always loads each subsystem's shipped artifacts/weights), so training
+# data has no reason to be in the build context -- and at 3.8GB, including
+# it would make every build slow regardless.
+Datasets/
+
+.git/
+.gitignore
+
+# Rebuilt inside the image by the frontend-build stage.
+dashboard/node_modules/
+dashboard/dist/
+
+__pycache__/
+**/__pycache__/
+*.pyc
+catboost_info/
+**/catboost_info/
+
+# Leftover local run artifacts, not the shipped submission snapshots.
+*_predictions.csv
+!predictions/**/*_predictions.csv
+
+.DS_Store
