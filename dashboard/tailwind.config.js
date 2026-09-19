@@ -35,6 +35,10 @@ export default {
           violet: "#9085e9",
           red: "#e66767",
         },
+        // LTA brand navy — header/nav band only, not the content palette.
+        brand: {
+          navy: "#171c8f",
+        },
       },
       fontFamily: {
         sans: ["system-ui", "-apple-system", "Segoe UI", "sans-serif"],
