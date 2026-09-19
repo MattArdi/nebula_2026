@@ -81,7 +81,7 @@ export default function SegmentTimeline({ title, subtitle, historical, xFormat, 
         <div className="text-sm font-medium text-ink-primary">{title}</div>
         <div className="flex items-center gap-3 text-[11px] text-ink-muted">
           <LegendDot color={COLORS.Normal} label="Normal" />
-          <LegendDot color={COLORS["Abnormal resistance"]} label="Abnormal resistance" />
+          <LegendDot color={COLORS["Abnormal resistance"]} label="Abnormal" />
         </div>
       </div>
       {subtitle && <p className="text-xs text-ink-muted mb-3">{subtitle}</p>}

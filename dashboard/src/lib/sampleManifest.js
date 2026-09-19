@@ -12,10 +12,11 @@ export const DOOR_SAMPLE = { url: "/sample-data/door/Train.csv", name: "Train.cs
 export const DOOR_ANSWERS_URL = "/sample-data/door/Train_Segments_Answer.csv";
 
 export const ACV_SAMPLE = { url: "/sample-data/acv/acv_case_01.xlsx", name: "acv_case_01.xlsx" };
-export const ACV_LABELS_URL = "/sample-data/acv/Train_Labels.csv";
 
-export const RAIL_SAMPLES = [{ url: "/sample-data/rail/Train1.csv", name: "Train1.csv" }];
-export const RAIL_LABELS_URL = "/sample-data/rail/Train_Labels.csv";
+// Rail's sample is a whole recording (one file per second, each ~17 MB), too
+// big to bundle — so this is the model's own predictions over the training
+// files that were available, one row per second, in the same file_id,prediction
+// format as a run's download.
+export const RAIL_SAMPLE_PREDICTIONS = { url: "/sample-data/rail/Train_Predictions.csv", name: "Train_Predictions.csv" };
 
 export const SHM_SAMPLES = [{ url: "/sample-data/shm/train01.csv", name: "train01.csv" }];
-export const SHM_LABELS_URL = "/sample-data/shm/Train_Labels.csv";

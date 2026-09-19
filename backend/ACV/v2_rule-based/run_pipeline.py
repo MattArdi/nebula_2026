@@ -194,6 +194,7 @@ def main() -> None:
             "margin_flagged": bool(mr["flagged"]),
             "margin_reason": mr["reason"],
             "trajectories": trajectories,
+            "indoor_temperature": schema.build_indoor_temperature(df_input),
         }
         args.diagnostics_output.write_text(json.dumps(diag, indent=2))
         print(f"  Wrote per-car diagnostics to {args.diagnostics_output}")

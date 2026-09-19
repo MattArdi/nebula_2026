@@ -12,8 +12,8 @@ import { getAuthedUser, login, logout } from "./lib/auth.js";
 const TITLES = {
   door: "Door",
   acv: "ACV",
-  rail: "Rail Corrugation",
   shm: "SHM",
+  rail: "Rail Corrugation",
 };
 
 // Cascading defaults so windows opened one after another don't land exactly
@@ -21,8 +21,8 @@ const TITLES = {
 const DEFAULT_WINDOWS = {
   door: { open: false, x: 40, y: 24, width: 640, height: 560, z: 1, maximized: false },
   acv: { open: false, x: 90, y: 64, width: 640, height: 580, z: 1, maximized: false },
-  rail: { open: false, x: 140, y: 104, width: 680, height: 600, z: 1, maximized: false },
-  shm: { open: false, x: 190, y: 144, width: 680, height: 600, z: 1, maximized: false },
+  shm: { open: false, x: 140, y: 104, width: 680, height: 600, z: 1, maximized: false },
+  rail: { open: false, x: 190, y: 144, width: 680, height: 600, z: 1, maximized: false },
 };
 
 export default function App() {
@@ -85,7 +85,7 @@ export default function App() {
   return (
     <div className="flex h-screen flex-col">
       <TopBar
-        title="Train Condition Monitoring"
+        title="Pawl Patrol"
         subtitle="Select a tab below to open its window"
         user={user}
         onLogout={() => {

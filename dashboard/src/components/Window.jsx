@@ -130,7 +130,7 @@ export default function Window({
           maximized ? "cursor-default" : "cursor-move"
         }`}
       >
-        <span className="text-sm font-medium text-ink-primary truncate">{title}</span>
+        <span className="text-2xl font-bold text-ink-primary truncate">{title}</span>
         <div className="flex items-center gap-1 shrink-0">
           <button
             onMouseDown={(e) => e.stopPropagation()}

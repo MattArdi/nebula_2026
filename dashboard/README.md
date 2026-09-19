@@ -1,4 +1,4 @@
-# Train Condition Monitoring — PS3
+# Pawl Patrol — PS3
 
 A single web app covering all four PS3 subsystems (Door, ACV, Rail Corrugation, SHM).
 Every subsystem's dashboard **opens already populated** with one real, bundled PS3

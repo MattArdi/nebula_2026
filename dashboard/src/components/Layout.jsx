@@ -4,8 +4,8 @@ const NAV_ITEMS = [
   { id: "home", label: "Overview" },
   { id: "door", label: "Door" },
   { id: "acv", label: "ACV" },
-  { id: "rail", label: "Rail Corrugation" },
   { id: "shm", label: "SHM" },
+  { id: "rail", label: "Rail Corrugation" },
 ];
 
 function BrandMark() {

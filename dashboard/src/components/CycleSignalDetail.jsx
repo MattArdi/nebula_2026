@@ -28,6 +28,19 @@ function ChartTooltip({ active, payload, label, unit }) {
   );
 }
 
+// The stream's timestamps are parsed as UTC (see parseDoorTimestamp), so format
+// them as UTC too — otherwise the browser's own timezone shifts them.
+function formatClock(ms) {
+  return new Date(ms).toLocaleTimeString([], {
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    fractionalSecondDigits: 3,
+    hour12: false,
+    timeZone: "UTC",
+  });
+}
+
 function formatStart(segment) {
   if (segment.start_time) return segment.start_time;
   return new Date(segment.start_ts).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" });
@@ -57,7 +70,7 @@ function SignalPanel({ segment, reference, dataKey, label, unit }) {
         {label}
         {unit && <span className="text-ink-muted"> ({unit})</span>}
       </div>
-      <ResponsiveContainer width="100%" height={140}>
+      <ResponsiveContainer width="100%" height={165}>
         <ComposedChart data={data} margin={{ top: 4, right: 12, left: -12, bottom: 0 }}>
           <CartesianGrid stroke={GRID} vertical={false} />
           <XAxis
@@ -68,6 +81,8 @@ function SignalPanel({ segment, reference, dataKey, label, unit }) {
             tick={{ fill: AXIS, fontSize: 10 }}
             axisLine={{ stroke: GRID }}
             tickLine={false}
+            height={40}
+            label={{ value: "Percentage of Cycle (%)", position: "insideBottom", offset: 2, fill: AXIS, fontSize: 10 }}
           />
           <YAxis tick={{ fill: AXIS, fontSize: 10 }} axisLine={{ stroke: GRID }} tickLine={false} width={44} domain={["auto", "auto"]} />
           <Tooltip content={<ChartTooltip unit={unit} />} cursor={{ stroke: AXIS, strokeWidth: 1 }} />
@@ -117,11 +132,26 @@ export default function CycleSignalDetail({ segment, normalAverage }) {
 
   return (
     <Card>
-      <div className="flex flex-wrap items-center justify-between gap-2 mb-1">
-        <div className="text-sm font-medium text-ink-primary">{segment.operation} cycle — {formatStart(segment)}</div>
-        <div className="text-xs" style={{ color }}>
-          {segment.prediction}
-        </div>
+      <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
+        <div className="text-sm font-medium text-ink-primary">{segment.operation} Cycle</div>
+        {reference.length > 0 && (
+          <div className="flex items-center gap-3 text-[11px] text-ink-muted">
+            <span className="inline-flex items-center gap-1.5">
+              <span className="w-2 h-2 rounded-full" style={{ background: color }} />
+              This cycle
+            </span>
+            <span className="inline-flex items-center gap-1.5">
+              <span className="w-3 h-0 border-t border-dashed" style={{ borderColor: REFERENCE_COLOR }} />
+              Normal average
+            </span>
+          </div>
+        )}
+      </div>
+
+      <div className="text-xs text-ink-secondary space-y-0.5 mb-3">
+        <div>Start Time: {formatClock(segment.start_ts)}</div>
+        <div>End Time: {formatClock(segment.end_ts)}</div>
+        <div>Total Cycle Time: {((segment.end_ts - segment.start_ts) / 1000).toFixed(2)} s</div>
       </div>
 
       {!reference.length ? (
@@ -129,24 +159,11 @@ export default function CycleSignalDetail({ segment, normalAverage }) {
           Not enough Normal {segment.operation} cycles loaded yet to build a comparison baseline.
         </p>
       ) : (
-        <>
-          <div className="flex items-center gap-3 text-[11px] text-ink-muted mb-3">
-            <span className="inline-flex items-center gap-1.5">
-              <span className="w-2 h-2 rounded-full" style={{ background: color }} />
-              This cycle
-            </span>
-            <span className="inline-flex items-center gap-1.5">
-              <span className="w-3 h-0 border-t border-dashed" style={{ borderColor: REFERENCE_COLOR }} />
-              Normal average (all loaded Normal {segment.operation} cycles)
-            </span>
-            <span>Shaded gap = deviation from normal, colored by this cycle's prediction</span>
-          </div>
-          <div className="space-y-4">
-            <SignalPanel segment={segment} reference={reference} dataKey="current" label="Motor current" unit="mA" />
-            <SignalPanel segment={segment} reference={reference} dataKey="voltage" label="Motor voltage" unit="×10mV" />
-            <SignalPanel segment={segment} reference={reference} dataKey="bemf" label="Motor back electromotive force" unit="" />
-          </div>
-        </>
+        <div className="space-y-4">
+          <SignalPanel segment={segment} reference={reference} dataKey="current" label="Motor current" unit="mA" />
+          <SignalPanel segment={segment} reference={reference} dataKey="voltage" label="Motor voltage" unit="×10mV" />
+          <SignalPanel segment={segment} reference={reference} dataKey="bemf" label="Motor Electrodynamic Force" unit="" />
+        </div>
       )}
     </Card>
   );

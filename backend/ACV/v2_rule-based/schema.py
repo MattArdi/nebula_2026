@@ -23,6 +23,7 @@ last, not for inventing a signal that doesn't exist.
 
 import re
 
+import numpy as np
 import pandas as pd
 
 CAR_COL_RE = re.compile(r"Car (\d+) - (.+)")
@@ -93,6 +94,43 @@ def build_deviation_frame(df: pd.DataFrame) -> tuple[pd.DataFrame, list[str]]:
             devs[car] = series
     dev_df = pd.DataFrame(devs)
     return dev_df, excluded
+
+
+def build_indoor_temperature(df: pd.DataFrame, max_points: int = 200) -> dict | None:
+    """
+    Per-car indoor temperature over the file (plus the cross-car median at
+    each point), downsampled to ~max_points evenly spaced rows -- diagnostics
+    only, for charting; never consulted by ranking.
+
+    x is the row position as a percentage of the file (0-100). Missing
+    readings come back as None so the result is valid JSON.
+    """
+    series = {}
+    for car, cols in sorted(parse_car_columns(df).items()):
+        col = cols.get(STANDARD_INDOOR) or cols.get(RICH_INDOOR)
+        if col is None:
+            continue
+        s = pd.to_numeric(df[col], errors="coerce")
+        if s.notna().any():
+            series[car] = s
+    if not series:
+        return None
+
+    # Rows where no car reported anything are dropped, so the chart has no
+    # dead points; x is then the position among the remaining rows.
+    frame = pd.DataFrame(series).dropna(how="all")
+    n = len(frame)
+    idx = np.unique(np.linspace(0, n - 1, min(n, max_points)).round().astype(int))
+    sampled = frame.iloc[idx]
+
+    def clean(values):
+        return [None if pd.isna(v) else round(float(v), 2) for v in values]
+
+    return {
+        "pct": [round(float(i) / max(1, n - 1) * 100, 2) for i in idx],
+        "fleet_median": clean(sampled.median(axis=1)),
+        "cars": {car: clean(sampled[car]) for car in sampled.columns},
+    }
 
 
 def get_mode_transitions(df: pd.DataFrame, car_cols: dict[str, str]) -> int | None:

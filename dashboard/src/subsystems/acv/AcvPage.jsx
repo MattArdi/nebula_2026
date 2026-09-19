@@ -1,83 +1,51 @@
-import { useEffect, useMemo, useRef, useState } from "react";
-import Papa from "papaparse";
-import { FileDrop, PrimaryButton, Card, StatCard, FileRunPicker } from "../../components/ui.jsx";
-import AcvCusumChart from "../../components/AcvCusumChart.jsx";
-import { downloadCsvText } from "../../lib/csvExport.js";
+import { useEffect, useRef, useState } from "react";
+import { FileDrop, StatCard } from "../../components/ui.jsx";
+import { CurrentDatasetHeader, UploadHeading } from "../../components/DatasetSections.jsx";
+import UploadCard from "../../components/UploadCard.jsx";
+import AcvTemperatureChart from "../../components/AcvTemperatureChart.jsx";
 import { predictAcv } from "../../lib/apiClient.js";
 import { fetchAsFile } from "../../lib/sampleFiles.js";
-import { ACV_SAMPLE, ACV_LABELS_URL } from "../../lib/sampleManifest.js";
-import { useFileRuns } from "../../lib/useFileRuns.js";
-
-// Ground truth from Train_Labels.csv — only exists for the 6 labelled
-// Train case files. acv_test_case.xlsx's answer is deliberately
-// unpublished (used by the organisers to grade submissions).
-async function fetchTrainLabels() {
-  const res = await fetch(ACV_LABELS_URL);
-  if (!res.ok) return {};
-  const text = await res.text();
-  return new Promise((resolve) => {
-    Papa.parse(text, {
-      header: true,
-      skipEmptyLines: true,
-      complete: (results) => {
-        const map = {};
-        for (const row of results.data) map[row.filename] = row.faulty_car;
-        resolve(map);
-      },
-      error: () => resolve({}),
-    });
-  });
-}
+import { ACV_SAMPLE } from "../../lib/sampleManifest.js";
+import { TRAIN_IDS } from "../../lib/trainIds.js";
+import { useDatasetUploads } from "../../lib/useDatasetUploads.js";
 
 async function computeRun(file) {
   const result = await predictAcv(file);
   const row = result.rows[0]; // { file_id, ranked_cars }
-  const rankedCars = row.ranked_cars.split("|");
   return {
-    id: file.name,
     fileName: file.name,
-    rankedCars,
-    diagnostics: result.diagnostics ?? null,
+    rankedCars: row.ranked_cars.split("|"),
+    indoorTemperature: result.diagnostics?.indoor_temperature ?? null,
     csvText: result.csv,
-    statusMessage: `Ranked ${rankedCars.length} cars. Most likely faulty: Car ${rankedCars[0]}.`,
   };
 }
 
+// Stat tiles + indoor temperature chart for one file's result — used for both
+// the current dataset and each uploaded file's "View Prediction" panel.
+function AcvResultView({ run }) {
+  const { rankedCars, indoorTemperature } = run;
+  const faultyCarId = rankedCars[0];
+
+  return (
+    <div className="space-y-5">
+      <div className="grid grid-cols-2 gap-3">
+        <StatCard label="Cars Analysed" value={rankedCars.length} />
+        <StatCard label="Most likely faulty car" value={`Car ${faultyCarId}`} tone="critical" />
+      </div>
+
+      <AcvTemperatureChart indoor={indoorTemperature} faultyCarId={faultyCarId} />
+    </div>
+  );
+}
+
 export default function AcvPage({ onSummary }) {
-  const { runs, selectedId, setSelectedId, addRun, removeRun } = useFileRuns();
-  const [status, setStatus] = useState(null);
-  const [trainLabels, setTrainLabels] = useState({});
-  const [busy, setBusy] = useState(false);
-  const [visibleCarIds, setVisibleCarIds] = useState(null); // Set, null until first loaded (defaults to "all")
+  // The dataset the stats, chart and Overview card are showing — starts as
+  // the bundled sample, and is swapped by "Upload to current dataset".
+  // Everything here is in-memory only, so a refresh resets it.
+  const [currentRun, setCurrentRun] = useState(null);
+  const [loadError, setLoadError] = useState(null);
+  const { uploads, appliedKey, setAppliedKey, handleFiles } = useDatasetUploads(computeRun);
   const autoLoadedRef = useRef(false);
-
-  useEffect(() => {
-    fetchTrainLabels().then(setTrainLabels);
-  }, []);
-
-  async function runFiles(files) {
-    setStatus(null);
-    setBusy(true);
-    const errors = [];
-    let lastOk = null;
-    for (const file of files) {
-      try {
-        const run = await computeRun(file);
-        addRun(run);
-        lastOk = run;
-      } catch (err) {
-        errors.push(`${file.name}: ${err.message}`);
-      }
-    }
-    setBusy(false);
-    setStatus(
-      errors.length
-        ? { type: "error", message: errors.join("; ") }
-        : lastOk
-          ? { type: "ok", message: lastOk.statusMessage }
-          : null
-    );
-  }
 
   useEffect(() => {
     if (autoLoadedRef.current) return;
@@ -85,61 +53,31 @@ export default function AcvPage({ onSummary }) {
     (async () => {
       try {
         const file = await fetchAsFile(ACV_SAMPLE.url, ACV_SAMPLE.name);
-        await runFiles([file]);
+        setCurrentRun(await computeRun(file));
       } catch (err) {
-        setStatus({ type: "error", message: `Could not load bundled sample data: ${err.message}` });
+        setLoadError(`Could not load bundled sample data: ${err.message}`);
       }
     })();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // A file switch invalidates the chart's ticked-car selection — a
-  // different case file can have a different faulty car / trajectory set.
-  useEffect(() => {
-    setVisibleCarIds(null);
-  }, [selectedId]);
-
-  const selected = runs.find((r) => r.id === selectedId) ?? null;
-  const fileName = selected?.fileName ?? null;
-  const rankedCars = selected?.rankedCars ?? null;
-  const diagnostics = selected?.diagnostics ?? null;
-
-  function handleDownload() {
-    downloadCsvText("acv_predictions.csv", selected.csvText);
+  function applyUpload(upload) {
+    setCurrentRun(upload.run);
+    setAppliedKey(upload.key);
   }
 
-  // Ground truth from Train_Labels.csv — null for any file it doesn't cover.
-  const groundTruthCarId = trainLabels[fileName] ?? null;
-  const modelMatchesGroundTruth = groundTruthCarId != null && rankedCars?.[0] === groundTruthCarId;
-
-  const scoreById = useMemo(() => {
-    const map = {};
-    for (const c of diagnostics?.cars ?? []) map[c.id] = c;
-    return map;
-  }, [diagnostics]);
-  const maxScore = Math.max(1e-9, ...Object.values(scoreById).map((c) => c.primary_score ?? 0));
-
-  const trajectoryCarIds = Object.keys(diagnostics?.trajectories ?? {});
-  const effectiveVisibleCarIds = visibleCarIds ?? new Set(trajectoryCarIds);
-  function toggleCarVisible(id) {
-    const next = new Set(effectiveVisibleCarIds);
-    if (next.has(id)) next.delete(id);
-    else next.add(id);
-    setVisibleCarIds(next);
-  }
+  const rankedCars = currentRun?.rankedCars ?? null;
 
   useEffect(() => {
     if (!rankedCars || !onSummary) return;
     onSummary({
-      fileCount: runs.length,
-      groundTruthCarId,
+      fileCount: 1 + uploads.length,
       stats: [
         { label: "Cars analysed", value: rankedCars.length },
         { label: "Most likely faulty", value: `Car ${rankedCars[0]}`, tone: "critical" },
       ],
       // Exact acv_predictions.csv schema (file_id, ranked_cars) — one row
-      // per uploaded case file, for the Overview's per-subsystem box.
-      predictions: [{ file_id: fileName, ranked_cars: rankedCars.join("|") }],
+      // per case file, for the Overview's per-subsystem box.
+      predictions: [{ file_id: currentRun.fileName, ranked_cars: rankedCars.join("|") }],
       predictionCount: 1,
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -147,129 +85,30 @@ export default function AcvPage({ onSummary }) {
 
   return (
     <div className="space-y-5">
-      <Card>
-        <div className="text-sm font-medium text-ink-primary mb-1">What this does</div>
-        <p className="text-xs text-ink-muted">
-          Ranks all 8 cars on the train data by how likely each is to have a refrigerant leak.
-        </p>
-      </Card>
+      <CurrentDatasetHeader trainNumber={TRAIN_IDS.acv} />
 
-      <FileRunPicker runs={runs} selectedId={selectedId} onSelect={setSelectedId} onRemove={removeRun} />
-
-      {rankedCars && (
-        <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-          <StatCard label="Cars analysed" value={rankedCars.length} />
-          <StatCard
-            label="Model's most likely faulty"
-            value={`Car ${rankedCars[0]}`}
-            tone={groundTruthCarId ? (modelMatchesGroundTruth ? "good" : "critical") : "critical"}
-          />
-          {groundTruthCarId ? (
-            <StatCard label="Confirmed faulty (Train_Labels.csv)" value={`Car ${groundTruthCarId}`} tone="good" />
-          ) : diagnostics ? (
-            <StatCard
-              label="Margin vs. runner-up"
-              value={diagnostics.margin != null ? diagnostics.margin.toFixed(2) : "—"}
-              tone={diagnostics.margin_flagged ? "serious" : "good"}
-              hint={diagnostics.margin_flagged ? "Thinner than usual — a closer call" : undefined}
-            />
-          ) : null}
+      {loadError && (
+        <div className="text-xs rounded-md px-3 py-2 border text-status-critical border-status-critical/40 bg-status-critical/10">
+          {loadError}
         </div>
       )}
+      {!currentRun && !loadError && <div className="text-xs text-ink-muted">Processing… large files can take a few seconds.</div>}
 
-      {groundTruthCarId && rankedCars && (
-        <div
-          className={`text-xs rounded-md px-3 py-2 border ${
-            modelMatchesGroundTruth
-              ? "text-status-good border-status-good/40 bg-status-good/10"
-              : "text-status-critical border-status-critical/40 bg-status-critical/10"
-          }`}
-        >
-          {modelMatchesGroundTruth
-            ? `Model's top pick (Car ${rankedCars[0]}) matches the confirmed faulty car from Train_Labels.csv.`
-            : `Model's top pick (Car ${rankedCars[0]}) does NOT match the confirmed faulty car (Car ${groundTruthCarId}) from Train_Labels.csv.`}
+      {currentRun && <AcvResultView run={currentRun} />}
+
+      <div className="space-y-3">
+        <UploadHeading />
+        <FileDrop onFiles={handleFiles} accept=".xlsx" multiple />
+      </div>
+
+      {uploads.length > 0 && (
+        <div className="space-y-5">
+          {uploads.map((u) => (
+            <UploadCard key={u.key} upload={u} isCurrent={appliedKey === u.key} onApply={() => applyUpload(u)}>
+              {(run) => <AcvResultView run={run} />}
+            </UploadCard>
+          ))}
         </div>
-      )}
-
-      {diagnostics && !groundTruthCarId && (
-        <div
-          className={`text-xs rounded-md px-3 py-2 border ${
-            diagnostics.margin_flagged
-              ? "text-status-serious border-status-serious/40 bg-status-serious/10"
-              : "text-status-good border-status-good/40 bg-status-good/10"
-          }`}
-        >
-          {diagnostics.margin_flagged ? "Thin margin — " : ""}
-          {diagnostics.margin_reason}
-        </div>
-      )}
-
-      {diagnostics?.trajectories && (
-        <AcvCusumChart
-          title="Per-car CUSUM score over the trip"
-          subtitle="Every data-bearing car's running deviation score across the file's real time axis — shows when a car's score started climbing, not just which one ended up on top."
-          trajectories={diagnostics.trajectories}
-          topCarId={rankedCars?.[0]}
-          visibleCarIds={effectiveVisibleCarIds}
-          onToggleCar={toggleCarVisible}
-          caveat="A rising, non-resetting climb is the ranking's real signal — ordinary jitter keeps decaying back toward 0."
-        />
-      )}
-
-      <FileDrop
-        onFiles={runFiles}
-        accept=".xlsx"
-        multiple
-        hint="One or many .xlsx case files, e.g. acv_case_01.xlsx — each adds a file to compare"
-      />
-
-      {fileName && <div className="text-xs text-ink-muted">{fileName}</div>}
-      {busy && <div className="text-xs text-ink-muted">Processing… large files can take a few seconds.</div>}
-
-      {status && (
-        <div
-          className={`text-xs rounded-md px-3 py-2 border ${
-            status.type === "ok"
-              ? "text-status-good border-status-good/40 bg-status-good/10"
-              : "text-status-critical border-status-critical/40 bg-status-critical/10"
-          }`}
-        >
-          {status.message}
-        </div>
-      )}
-
-      {rankedCars && (
-        <Card className="!px-0 !py-0 overflow-hidden">
-          <div className="flex items-center justify-between px-4 py-3 border-b border-line-hairline">
-            <div className="text-sm font-medium text-ink-primary">Ranked cars, most likely faulty first</div>
-            <PrimaryButton onClick={handleDownload}>Download acv_predictions.csv</PrimaryButton>
-          </div>
-          <div className="px-4 py-3 space-y-2">
-            {rankedCars.map((id, i) => {
-              const c = scoreById[id];
-              return (
-                <div key={id} className="flex items-center gap-3">
-                  <span className="w-6 text-xs text-ink-muted tabular-nums">{i + 1}</span>
-                  <span className="w-16 text-sm font-medium text-ink-primary">Car {id}</span>
-                  {c?.primary_score != null && (
-                    <>
-                      <div className="flex-1 h-2 rounded-full bg-surface-raised overflow-hidden">
-                        <div
-                          className={`h-full ${i === 0 ? "bg-status-critical" : "bg-series-blue"}`}
-                          style={{ width: `${Math.max(4, (c.primary_score / maxScore) * 100)}%` }}
-                        />
-                      </div>
-                      <span className="w-16 text-xs text-ink-muted tabular-nums text-right">{c.primary_score.toFixed(2)}</span>
-                    </>
-                  )}
-                  {id === groundTruthCarId && (
-                    <span className="text-[11px] text-status-good font-medium shrink-0">confirmed faulty</span>
-                  )}
-                </div>
-              );
-            })}
-          </div>
-        </Card>
       )}
     </div>
   );
