@@ -1,36 +1,43 @@
-# Train Condition Monitoring — PS3
+# Pawl Patrol — PS3
 
 A single web app covering all four PS3 subsystems (Door, ACV, Rail Corrugation, SHM).
-Every subsystem's dashboard **opens already populated** with real, bundled PS3
-held-out test data — stat cards + a results table, no upload required just to look
-around — and dropping in your own file(s) re-runs the same pipeline and replaces
-what's shown. Everything runs client-side in the browser — no backend, no upload to
-a server.
+Every subsystem's dashboard **opens already populated** with one real, bundled PS3
+labelled Train file — stat cards + a results table, no upload required just to look
+around — and dropping in your own file(s) adds them alongside what's already loaded,
+with a file picker to switch between everything you've loaded so far. Predictions
+come from the real Python pipelines in `backend/`, served by the FastAPI app in
+`backend/api/main.py` — see that file's docstring to run it locally.
 
 ## Quick start
 
 ```bash
+# Terminal 1 — backend
+python -m venv .venv && source .venv/bin/activate
+pip install -r backend/api/requirements.txt
+uvicorn backend.api.main:app --reload --port 8000
+
+# Terminal 2 — frontend
+cd dashboard
 npm install
 npm run dev
 ```
 
-Open the printed URL (default `http://localhost:5174`). Each subsystem in the
-sidebar loads its own dashboard automatically. Drop in file(s) to swap in different
-data (e.g. the official held-out test set at submission time) and get an updated
-prediction table + download button.
+Open the printed URL (default `http://localhost:5174`). Each subsystem tab loads
+its own dashboard automatically. Drop in file(s) to add more data to compare (e.g.
+the official held-out test set at submission time) and get an updated prediction
+table + download button.
 
 ## Bundled sample data
 
-`public/sample-data/` holds a representative subset of the real PS3 `Test/` files,
-copied from `PS3/02_Datasets/`, auto-fetched on each page's first load (see
-`src/lib/sampleManifest.js` for exactly which files):
+`public/sample-data/` holds exactly **one** labelled Train file per subsystem —
+standardized to a single file to keep the repo's storage and initial-load size
+small, rather than the full curated multi-file sets used earlier in development
+(see `src/lib/sampleManifest.js`):
 
-- **Door**: the full `Test.csv` stream.
-- **ACV**: the full `acv_test_case.xlsx`.
-- **Rail Corrugation**: 12 files (4 predicted Normal, 4 Side I, 4 Side II) out of the
-  official 68, chosen for a demo mix — the other 56 are correctly predicted Normal
-  too, just not bundled to keep the repo size reasonable (68 files is ~1.1GB).
-- **SHM**: all 16 official test files.
+- **Door**: `Train.csv`.
+- **ACV**: `acv_case_01.xlsx`.
+- **Rail Corrugation**: `Train1.csv`.
+- **SHM**: `train01.csv`.
 
 This is a demo convenience, not a substitute for the real submission — for
 `predictions.zip`, drop the **full, official** Test folder for each subsystem in to

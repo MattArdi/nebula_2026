@@ -2,9 +2,9 @@ import { ResponsiveContainer, LineChart, Line, XAxis, YAxis, Tooltip, CartesianG
 import { Card } from "./ui.jsx";
 
 const PRED_COLOR = "#3987e5";
-const TRUE_COLOR = "#898781";
-const GRID = "#2c2c2a";
-const AXIS = "#898781";
+const TRUE_COLOR = "#908e87";
+const GRID = "#e3dfd3";
+const AXIS = "#908e87";
 
 function ChartTooltip({ active, payload }) {
   if (!active || !payload?.length) return null;

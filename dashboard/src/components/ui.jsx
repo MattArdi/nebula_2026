@@ -128,6 +128,38 @@ export function StatCard({ label, value, tone = "default", hint }) {
   );
 }
 
+// Lets a page hold more than one loaded file's result at once (e.g. Door,
+// ACV) — a dropdown to pick which loaded file is shown, plus a remove
+// button per entry, mirroring the "Inspect file" pattern already used by
+// the multi-file subsystem pages so the UX is consistent across all four.
+export function FileRunPicker({ runs, selectedId, onSelect, onRemove }) {
+  if (runs.length <= 1) return null;
+  return (
+    <div className="flex items-center gap-2 flex-wrap">
+      <span className="text-xs text-ink-muted">Inspect file:</span>
+      <select
+        value={selectedId ?? ""}
+        onChange={(e) => onSelect(e.target.value)}
+        className="text-xs bg-surface-raised border border-line-border rounded-md px-1.5 py-1 text-ink-primary"
+      >
+        {runs.map((r, i) => (
+          <option key={r.id} value={r.id}>
+            File {i + 1} — {r.id}
+          </option>
+        ))}
+      </select>
+      {selectedId && (
+        <button
+          onClick={() => onRemove(selectedId)}
+          className="text-xs text-ink-muted hover:text-status-critical border border-line-border rounded-md px-2 py-1 transition-colors"
+        >
+          Remove this file
+        </button>
+      )}
+    </div>
+  );
+}
+
 export function Card({ children, className = "" }) {
   return (
     <div className={`rounded-lg border border-line-border bg-surface-card px-4 py-3.5 ${className}`}>

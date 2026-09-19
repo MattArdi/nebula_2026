@@ -4,9 +4,9 @@ import { Card } from "./ui.jsx";
 // Fixed categorical order (never cycled/reassigned), matching tailwind
 // config's `series` palette exactly — happens to be 8 colors for 8 cars.
 const CAR_COLORS = ["#3987e5", "#d95926", "#199e70", "#c98500", "#d55181", "#008300", "#9085e9", "#e66767"];
-const MEDIAN_COLOR = "#c3c2b7";
-const GRID = "#2c2c2a";
-const AXIS = "#898781";
+const MEDIAN_COLOR = "#605f5a";
+const GRID = "#e3dfd3";
+const AXIS = "#908e87";
 
 function ChartTooltip({ active, payload, label, faultyCarId }) {
   if (!active || !payload?.length) return null;

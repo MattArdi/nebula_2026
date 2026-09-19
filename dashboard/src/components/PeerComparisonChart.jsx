@@ -2,10 +2,10 @@ import { ResponsiveContainer, ComposedChart, Area, Line, XAxis, YAxis, Tooltip, 
 import { Card } from "./ui.jsx";
 
 const CAR_COLOR = "#3987e5";
-const PEER_COLOR = "#898781";
+const PEER_COLOR = "#908e87";
 const DEVIATION_COLOR = "#e66767";
-const GRID = "#2c2c2a";
-const AXIS = "#898781";
+const GRID = "#e3dfd3";
+const AXIS = "#908e87";
 
 function ChartTooltip({ active, payload, label, unit }) {
   if (!active || !payload?.length) return null;

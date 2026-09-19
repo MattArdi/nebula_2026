@@ -6,8 +6,15 @@ html, body, #root {
   height: 100%;
 }
 
+/* Every text size in the app is in rem, so this one line scales all of it with
+   the screen: about 15px on a small laptop, 16px at 1280px, 19px on a big
+   monitor. */
+html {
+  font-size: clamp(14px, 0.55vw + 9px, 19px);
+}
+
 body {
-  background: #0d0d0d;
+  background: #fdf9eb;
 }
 
 ::-webkit-scrollbar {
@@ -18,6 +25,6 @@ body {
   background: transparent;
 }
 ::-webkit-scrollbar-thumb {
-  background: #383835;
+  background: #d1cec3;
   border-radius: 6px;
 }

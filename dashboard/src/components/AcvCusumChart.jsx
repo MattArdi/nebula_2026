@@ -2,8 +2,8 @@ import { ResponsiveContainer, ComposedChart, Line, XAxis, YAxis, Tooltip, Cartes
 import { Card } from "./ui.jsx";
 
 const CAR_COLORS = ["#3987e5", "#d95926", "#199e70", "#c98500", "#d55181", "#008300", "#9085e9", "#e66767"];
-const GRID = "#2c2c2a";
-const AXIS = "#898781";
+const GRID = "#e3dfd3";
+const AXIS = "#908e87";
 const MAX_POINTS = 150;
 
 // Downsamples a trajectory to ~MAX_POINTS by stride -- CUSUM is already a

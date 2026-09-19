@@ -1,33 +1,22 @@
 // Bundled real PS3 Train (labelled) files, auto-loaded so every dashboard
 // opens already populated AND already checkable against a published
 // correct answer — no upload required, and no unverifiable guesswork.
-// None of these default to the unpublished Test set anymore (its answers
-// are held back by the organisers to grade submissions after the
-// hackathon) — upload a Test file manually via each page's file drop
-// once you're ready to run the final submission.
+// Standardized to exactly ONE bundled file per subsystem (the first Train
+// file, i.e. "Train 1") to keep the repo's storage and initial-load size
+// small — drop any other Train/Test file(s) in via each page's file drop to
+// load more, which now adds to what's loaded rather than replacing it.
+// None of these default to the unpublished Test set (its answers are held
+// back by the organisers to grade submissions after the hackathon).
 
 export const DOOR_SAMPLE = { url: "/sample-data/door/Train.csv", name: "Train.csv" };
 export const DOOR_ANSWERS_URL = "/sample-data/door/Train_Segments_Answer.csv";
 
 export const ACV_SAMPLE = { url: "/sample-data/acv/acv_case_01.xlsx", name: "acv_case_01.xlsx" };
-export const ACV_LABELS_URL = "/sample-data/acv/Train_Labels.csv";
 
-// 4 Normal / 4 Side I / 4 Side II — a curated, class-balanced subset of the
-// 272 labelled Train files (the real class split is heavily imbalanced,
-// ~86% Normal, so an unfiltered sample would show almost no faults).
-export const RAIL_SAMPLES = [
-  "Train1.csv", "Train3.csv", "Train4.csv", "Train5.csv", // Normal
-  "Train62.csv", "Train83.csv", "Train100.csv", "Train106.csv", // Side I
-  "Train2.csv", "Train12.csv", "Train26.csv", "Train30.csv", // Side II
-].map((name) => ({ url: `/sample-data/rail/${name}`, name }));
-export const RAIL_LABELS_URL = "/sample-data/rail/Train_Labels.csv";
+// Rail's sample is a whole recording (one file per second, each ~17 MB), too
+// big to bundle — so this is the model's own predictions over the training
+// files that were available, one row per second, in the same file_id,prediction
+// format as a run's download.
+export const RAIL_SAMPLE_PREDICTIONS = { url: "/sample-data/rail/Train_Predictions.csv", name: "Train_Predictions.csv" };
 
-// 16 of the 64 labelled Train files, evenly spaced across the real damage
-// range (0.03 to 0.79) so the sample spans low/medium/high, not clustered.
-export const SHM_SAMPLES = [
-  "train13.csv", "train33.csv", "train09.csv", "train50.csv",
-  "train62.csv", "train21.csv", "train24.csv", "train59.csv",
-  "train01.csv", "train51.csv", "train44.csv", "train45.csv",
-  "train36.csv", "train06.csv", "train16.csv", "train23.csv",
-].map((name) => ({ url: `/sample-data/shm/${name}`, name }));
-export const SHM_LABELS_URL = "/sample-data/shm/Train_Labels.csv";
+export const SHM_SAMPLES = [{ url: "/sample-data/shm/train01.csv", name: "train01.csv" }];

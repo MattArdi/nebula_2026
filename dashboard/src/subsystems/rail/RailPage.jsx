@@ -1,135 +1,237 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Papa from "papaparse";
-import BatchSubsystemPage from "../../components/BatchSubsystemPage.jsx";
-import { LabelBadge } from "../../components/ui.jsx";
-import RailProbabilityChart from "../../components/RailProbabilityChart.jsx";
+import { FileDrop, StatCard } from "../../components/ui.jsx";
+import { CurrentDatasetHeader, UploadHeading } from "../../components/DatasetSections.jsx";
+import UploadCard from "../../components/UploadCard.jsx";
+import RailAbnormalitiesChart from "../../components/RailAbnormalitiesChart.jsx";
 import { predictRail } from "../../lib/apiClient.js";
-import { RAIL_SAMPLES, RAIL_LABELS_URL } from "../../lib/sampleManifest.js";
+import { fetchAsFile } from "../../lib/sampleFiles.js";
+import { RAIL_SAMPLE_PREDICTIONS } from "../../lib/sampleManifest.js";
+import { useDatasetUploads } from "../../lib/useDatasetUploads.js";
+import { expandZipFiles } from "../../lib/zip.js";
 
-// The backend needs the raw File (feature extraction happens server-side,
-// in the real validated pipeline) — no client-side parsing needed.
-async function parseRailFile(file) {
-  return file;
+// Files per backend request — each is ~17 MB, so this keeps a single
+// request modest while still paying the pipeline's startup cost only once
+// per chunk instead of once per file.
+const CHUNK_SIZE = 5;
+
+const naturalCompare = (a, b) => a.localeCompare(b, undefined, { numeric: true });
+
+// Puts predictions in recording order (Train2 before Train10) and numbers each
+// second — by the number in its file name (Train37.csv is second 37) when
+// every file has one, otherwise by position.
+function buildRun(predictions) {
+  const sorted = [...predictions].sort((a, b) => naturalCompare(a.file_id, b.file_id));
+  const numbers = sorted.map((r) => /(\d+)\.[^.]*$/.exec(r.file_id)?.[1]);
+  const useNumbers = numbers.every((n) => n != null);
+  const rows = sorted.map((r, i) => ({ ...r, second: useNumbers ? Number(numbers[i]) : i + 1 }));
+
+  const csvText =
+    Papa.unparse({ fields: ["file_id", "prediction"], data: rows.map((r) => [r.file_id, r.prediction]) }, { newline: "\n" }) +
+    "\n";
+  return { rows, csvText };
 }
 
-async function predictFile(file) {
-  const result = await predictRail([file]);
-  const row = result.rows[0]; // { file_id, prediction }
-  const diag = result.diagnostics?.[0]; // { probabilities, speed_kmh, worst_offender }
-  return {
-    prediction: row.prediction,
-    probabilities: diag?.probabilities ?? null,
-    speedKmh: diag?.speed_kmh ?? null,
-    worstOffender: diag?.worst_offender ?? null,
-  };
-}
-
-function computeStats(results) {
-  const counts = { Normal: 0, "Side I": 0, "Side II": 0 };
-  for (const r of results) counts[r.prediction] = (counts[r.prediction] ?? 0) + 1;
-  const stats = [
-    { label: "Files", value: results.length },
-    { label: "Normal", value: counts.Normal, tone: "good" },
-    { label: "Side I", value: counts["Side I"], tone: counts["Side I"] > 0 ? "critical" : "good" },
-    { label: "Side II", value: counts["Side II"], tone: counts["Side II"] > 0 ? "critical" : "good" },
-  ];
-  const withTruth = results.filter((r) => r.trueLabel != null);
-  if (withTruth.length) {
-    const correct = withTruth.filter((r) => r.matchesTruth).length;
-    stats.push({
-      label: "Match Train_Labels.csv",
-      value: `${correct}/${withTruth.length}`,
-      tone: correct === withTruth.length ? "good" : "serious",
-    });
+// A rail dataset is a set of files, each one second of the recording. Runs
+// the backend on all of them.
+async function computeRun(files, onProgress) {
+  const predictions = [];
+  for (let i = 0; i < files.length; i += CHUNK_SIZE) {
+    const result = await predictRail(files.slice(i, i + CHUNK_SIZE));
+    predictions.push(...result.rows);
+    onProgress?.(Math.min(i + CHUNK_SIZE, files.length), files.length);
   }
-  return stats;
+  return buildRun(predictions);
 }
 
-// Health = % of the currently loaded files classified Normal.
-function computeHealth(results) {
-  const normal = results.filter((r) => r.prediction === "Normal").length;
-  return (normal / results.length) * 100;
+async function loadSampleRun() {
+  const file = await fetchAsFile(RAIL_SAMPLE_PREDICTIONS.url, RAIL_SAMPLE_PREDICTIONS.name);
+  const parsed = Papa.parse(await file.text(), { header: true, skipEmptyLines: true });
+  return buildRun(parsed.data);
 }
 
-// Per-file health is binary (Normal/faulty) — the model doesn't output a
-// graded severity for this subsystem, only a 3-class label.
-function computeEntities(results) {
-  return results.map((r) => ({
-    id: r.file_id,
-    label: r.prediction,
-    value: r.prediction === "Normal" ? 100 : 0,
-    valueType: "health",
-  }));
+// Everything dropped in one go — loose CSVs and/or zips of CSVs — is one
+// dataset. A single file or zip keeps its own name; several files are named
+// by count.
+async function groupRailFiles(files) {
+  const csvs = await expandZipFiles(files, { extensions: [".csv"] });
+  if (!csvs.length) throw new Error("No .csv files found.");
+  if (files.length === 1) {
+    return [{ name: files[0].name, baseName: files[0].name.replace(/\.[^.]+$/, ""), input: csvs }];
+  }
+  return [{ name: `${csvs.length} files`, baseName: "rail", input: csvs }];
 }
 
-function renderCell(row) {
-  const topProb = row.probabilities?.[row.prediction];
+function countByClass(rows) {
+  const counts = { Normal: 0, "Side I": 0, "Side II": 0 };
+  for (const r of rows) counts[r.prediction] = (counts[r.prediction] ?? 0) + 1;
+  return counts;
+}
+
+const TILE_TONES = {
+  "Side I": { text: "text-status-serious", border: "border-status-serious/60" },
+  "Side II": { text: "text-status-critical", border: "border-status-critical/60" },
+};
+
+// A Side I / Side II count that opens a list of exactly which seconds are
+// affected. With none, it's a plain tile.
+function AbnormalityTile({ label, count, open, onToggle }) {
+  const tone = TILE_TONES[label];
+  if (count === 0) return <StatCard label={label} value={count} tone="good" />;
+
   return (
-    <span className="inline-flex items-center gap-2">
-      <LabelBadge label={row.prediction} />
-      {topProb != null && <span className="text-xs text-ink-muted tabular-nums">{(topProb * 100).toFixed(0)}%</span>}
-    </span>
+    <button
+      onClick={onToggle}
+      aria-expanded={open}
+      className={`w-full text-left rounded-lg border bg-surface-card px-4 py-3.5 transition-colors hover:bg-surface-raised ${
+        open ? tone.border : "border-line-border"
+      }`}
+    >
+      <div className="flex items-center justify-between text-xs text-ink-muted">
+        <span>{label}</span>
+        <svg
+          width="12"
+          height="12"
+          viewBox="0 0 24 24"
+          fill="none"
+          aria-hidden="true"
+          className={`transition-transform ${open ? "rotate-180" : ""}`}
+        >
+          <path d="m6 9 6 6 6-6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
+      </div>
+      <div className={`text-2xl font-semibold tabular-nums mt-1 ${tone.text}`}>{count}</div>
+    </button>
   );
 }
 
-function renderCombined(results) {
+// Stat tiles + abnormalities dot graph for one dataset's result — used for
+// both the current dataset and each upload's "View Prediction" panel.
+function RailResultView({ run }) {
+  const [openSide, setOpenSide] = useState(null); // "Side I" | "Side II" | null
+  const [activeIndex, setActiveIndex] = useState(null); // index into run.rows pinned on the graph
+
+  // A different dataset has different seconds.
+  useEffect(() => {
+    setOpenSide(null);
+    setActiveIndex(null);
+  }, [run]);
+
+  const counts = countByClass(run.rows);
+
+  function toggleSide(side) {
+    setOpenSide((cur) => (cur === side ? null : side));
+    setActiveIndex(null);
+  }
+
+  const openRows = openSide
+    ? run.rows.map((r, index) => ({ ...r, index })).filter((r) => r.prediction === openSide)
+    : [];
+
   return (
-    <RailProbabilityChart
-      title="All files — class probability"
-      subtitle="Every loaded file's real ensemble output: P(Normal) / P(Side I) / P(Side II), stacked to 100%, not a hard label."
-      results={results}
-      caveat="Each file is an isolated 1-second snapshot — bars are ordered by load order only, not a real timeline."
-    />
+    <div className="space-y-5">
+      <div className="grid grid-cols-3 gap-3">
+        <StatCard label="Normal" value={counts.Normal} tone="good" />
+        <AbnormalityTile label="Side I" count={counts["Side I"]} open={openSide === "Side I"} onToggle={() => toggleSide("Side I")} />
+        <AbnormalityTile label="Side II" count={counts["Side II"]} open={openSide === "Side II"} onToggle={() => toggleSide("Side II")} />
+      </div>
+
+      {openSide && (
+        <div className="rounded-lg border border-line-border bg-surface-card px-4 py-3">
+          <div className="text-xs text-ink-muted mb-2">
+            {openSide} at these seconds — pick one to see it on the graph
+          </div>
+          <div className="flex flex-wrap gap-2 max-h-32 overflow-y-auto">
+            {openRows.map((r) => (
+              <button
+                key={r.index}
+                onClick={() => setActiveIndex((cur) => (cur === r.index ? null : r.index))}
+                className={`rounded-md border px-2.5 py-1 text-xs tabular-nums transition-colors ${
+                  activeIndex === r.index
+                    ? "border-series-blue bg-series-blue/10 text-ink-primary font-medium"
+                    : "border-line-border text-ink-secondary hover:bg-surface-raised"
+                }`}
+              >
+                Second {r.second}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      <RailAbnormalitiesChart rows={run.rows} activeIndex={activeIndex} />
+    </div>
   );
 }
 
 export default function RailPage({ onSummary }) {
-  const [trueLabels, setTrueLabels] = useState(null);
+  // The dataset the stats, chart and Overview card are showing — starts as
+  // the bundled sample, and is swapped by "Upload to current dataset".
+  // Everything here is in-memory only, so a refresh resets it.
+  const [currentRun, setCurrentRun] = useState(null);
+  const [loadError, setLoadError] = useState(null);
+  const { uploads, appliedKey, setAppliedKey, handleFiles } = useDatasetUploads(computeRun, groupRailFiles);
+  const autoLoadedRef = useRef(false);
 
   useEffect(() => {
-    fetch(RAIL_LABELS_URL)
-      .then((res) => (res.ok ? res.text() : null))
-      .then((text) => {
-        if (!text) return;
-        Papa.parse(text, {
-          header: true,
-          skipEmptyLines: true,
-          complete: (results) => {
-            const map = {};
-            for (const row of results.data) map[row.filename] = row.label;
-            setTrueLabels(map);
-          },
-        });
-      })
-      .catch(() => {});
+    if (autoLoadedRef.current) return;
+    autoLoadedRef.current = true;
+    (async () => {
+      try {
+        setCurrentRun(await loadSampleRun());
+      } catch (err) {
+        setLoadError(`Could not load bundled sample data: ${err.message}`);
+      }
+    })();
   }, []);
 
+  function applyUpload(upload) {
+    setCurrentRun(upload.run);
+    setAppliedKey(upload.key);
+  }
+
+  useEffect(() => {
+    if (!currentRun || !onSummary) return;
+    const counts = countByClass(currentRun.rows);
+    onSummary({
+      fileCount: 1 + uploads.length,
+      abnormalBySide: { "Side I": counts["Side I"], "Side II": counts["Side II"] },
+      stats: [
+        { label: "Normal", value: counts.Normal, tone: "good" },
+        { label: "Side I", value: counts["Side I"] },
+        { label: "Side II", value: counts["Side II"] },
+      ],
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentRun]);
+
   return (
-    <BatchSubsystemPage
-      title="Rail corrugation predictions"
-      description={
-        <>
-          Drop one or many axle-box vibration/shock recordings (e.g. <code className="text-ink-secondary">Train1.csv</code>
-          ...<code className="text-ink-secondary">Train272.csv</code>, or a .zip of several). Each file runs through
-          the real validated ensemble (feature extraction + CatBoost/XGBoost/LogReg soft voting) and is classified
-          as Normal, Side I, or Side II corrugation. Check against{" "}
-          <code className="text-ink-secondary">Train_Labels.csv</code> by dropping Train files, or drop Test files
-          for a real submission-ready run.
-        </>
-      }
-      csvFilename="rail_predictions.csv"
-      accept=".csv"
-      parseFile={parseRailFile}
-      predictFile={predictFile}
-      predictionHeader="Prediction"
-      sampleFiles={RAIL_SAMPLES}
-      trueLabels={trueLabels}
-      computeStats={computeStats}
-      computeHealth={computeHealth}
-      computeEntities={computeEntities}
-      renderCell={renderCell}
-      renderCombined={renderCombined}
-      onSummary={onSummary}
-    />
+    <div className="space-y-5">
+      <CurrentDatasetHeader id="rail" />
+
+      {loadError && (
+        <div className="text-xs rounded-md px-3 py-2 border text-status-critical border-status-critical/40 bg-status-critical/10">
+          {loadError}
+        </div>
+      )}
+      {!currentRun && !loadError && <div className="text-xs text-ink-muted">Processing…</div>}
+
+      {currentRun && <RailResultView run={currentRun} />}
+
+      <div className="space-y-3">
+        <UploadHeading />
+        <FileDrop onFiles={handleFiles} accept=".csv,.zip" multiple />
+      </div>
+
+      {uploads.length > 0 && (
+        <div className="space-y-5">
+          {uploads.map((u) => (
+            <UploadCard key={u.key} upload={u} isCurrent={appliedKey === u.key} onApply={() => applyUpload(u)}>
+              {(run) => <RailResultView run={run} />}
+            </UploadCard>
+          ))}
+        </div>
+      )}
+    </div>
   );
 }

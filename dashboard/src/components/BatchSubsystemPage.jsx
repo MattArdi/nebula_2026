@@ -4,6 +4,14 @@ import { downloadCsv } from "../lib/csvExport.js";
 import { fetchAllAsFiles } from "../lib/sampleFiles.js";
 import { expandZipFiles } from "../lib/zip.js";
 
+function RemoveIcon() {
+  return (
+    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <path d="M5 5l14 14M19 5L5 19" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+    </svg>
+  );
+}
+
 // Shared "drop many files -> one prediction row per file" dashboard, used by
 // Rail Corrugation and SHM. Door and ACV have different-shaped output.
 export default function BatchSubsystemPage({
@@ -38,10 +46,12 @@ export default function BatchSubsystemPage({
   const [zipStatus, setZipStatus] = useState(null);
   const autoLoadedRef = useRef(false);
 
-  async function runFiles(files, sourceLabel) {
+  // mode "replace" swaps out everything currently loaded (used once, for the
+  // bundled sample); mode "merge" keeps every previously loaded file and
+  // adds these on top — re-dropping a same-named file just updates its row
+  // in place — so loading File 2 never makes File 1 disappear.
+  async function runFiles(files, sourceLabel, { mode = "merge" } = {}) {
     setStatus(null);
-    setResults(null);
-    setSelectedId(null);
     setBusy(true);
     setProgress({ current: 0, total: files.length });
 
@@ -69,8 +79,13 @@ export default function BatchSubsystemPage({
     }
 
     setBusy(false);
-    setResults(rows);
-    if (rows.length) setSelectedId(defaultSelect ? defaultSelect(rows) : rows[0].file_id);
+    setResults((prev) => {
+      const base = mode === "replace" || !prev ? [] : prev;
+      const byId = new Map(base.map((r) => [r.file_id, r]));
+      for (const row of rows) byId.set(row.file_id, row); // add new, update re-dropped
+      return Array.from(byId.values());
+    });
+    if (rows.length) setSelectedId(defaultSelect ? defaultSelect(rows) : rows[rows.length - 1].file_id);
     setStatus(
       errors.length
         ? { type: "error", message: `${rows.length} file(s) predicted; ${errors.length} failed: ${errors.slice(0, 3).join("; ")}${errors.length > 3 ? "…" : ""}` }
@@ -84,7 +99,7 @@ export default function BatchSubsystemPage({
     (async () => {
       try {
         const files = await fetchAllAsFiles(sampleFiles);
-        await runFiles(files, "Loaded PS3 sample data —");
+        await runFiles(files, "Loaded PS3 sample data —", { mode: "replace" });
       } catch (err) {
         setStatus({ type: "error", message: `Could not load bundled sample data: ${err.message}` });
         setBusy(false);
@@ -99,6 +114,11 @@ export default function BatchSubsystemPage({
       ["file_id", "prediction"],
       results.map((r) => ({ file_id: r.file_id, prediction: r.prediction }))
     );
+  }
+
+  function removeFile(fileId) {
+    setResults((prev) => (prev ?? []).filter((r) => r.file_id !== fileId));
+    setSelectedId((cur) => (cur === fileId ? null : cur));
   }
 
   // Derived separately so ground truth arriving after the sample files
@@ -175,9 +195,9 @@ export default function BatchSubsystemPage({
             onChange={(e) => setSelectedId(e.target.value)}
             className="text-xs bg-surface-raised border border-line-border rounded-md px-1.5 py-1 text-ink-primary"
           >
-            {resultsWithTruth.map((r) => (
+            {resultsWithTruth.map((r, i) => (
               <option key={r.file_id} value={r.file_id}>
-                {r.file_id}
+                File {i + 1} — {r.file_id}
               </option>
             ))}
           </select>
@@ -190,7 +210,7 @@ export default function BatchSubsystemPage({
         onFiles={handleDroppedFiles}
         accept={accept ? `${accept},.zip` : ".zip"}
         multiple
-        hint="Drop one or many files (or a single .zip of files) to replace the sample data above — one prediction row per file"
+        hint="Drop one or many files (or a single .zip of files) to add to what's loaded — one prediction row per file"
       />
       {zipStatus && <div className="text-xs text-ink-muted">{zipStatus}</div>}
 
@@ -218,13 +238,15 @@ export default function BatchSubsystemPage({
             <table className="w-full text-sm">
               <thead className="sticky top-0 bg-surface-card">
                 <tr className="text-left text-xs text-ink-muted border-b border-line-hairline">
+                  <th className="px-4 py-2 font-normal">#</th>
                   <th className="px-4 py-2 font-normal">File</th>
                   <th className="px-4 py-2 font-normal">{predictionHeader}</th>
                   {trueLabels && <th className="px-4 py-2 font-normal">True label</th>}
+                  <th className="px-4 py-2 font-normal w-8" aria-label="Remove" />
                 </tr>
               </thead>
               <tbody>
-                {resultsWithTruth.map((r) => (
+                {resultsWithTruth.map((r, i) => (
                   <tr
                     key={r.file_id}
                     onClick={renderDetail ? () => setSelectedId(r.file_id) : undefined}
@@ -232,6 +254,7 @@ export default function BatchSubsystemPage({
                       renderDetail ? "cursor-pointer hover:bg-surface-raised transition-colors" : ""
                     } ${renderDetail && r.file_id === selectedId ? "bg-series-blue/10" : ""}`}
                   >
+                    <td className="px-4 py-2 text-ink-muted tabular-nums">{i + 1}</td>
                     <td className="px-4 py-2 text-ink-secondary">{r.file_id}</td>
                     <td className="px-4 py-2">
                       {renderCell
@@ -249,6 +272,19 @@ export default function BatchSubsystemPage({
                         )}
                       </td>
                     )}
+                    <td className="px-2 py-2 text-right">
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          removeFile(r.file_id);
+                        }}
+                        className="text-ink-muted hover:text-status-critical transition-colors p-1"
+                        aria-label={`Remove ${r.file_id}`}
+                        title={`Remove ${r.file_id}`}
+                      >
+                        <RemoveIcon />
+                      </button>
+                    </td>
                   </tr>
                 ))}
               </tbody>

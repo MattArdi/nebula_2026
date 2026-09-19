@@ -2,10 +2,10 @@ import { ResponsiveContainer, ComposedChart, Line, XAxis, YAxis, Tooltip, Cartes
 import { Card } from "./ui.jsx";
 
 const STATUS_COLOR = { Normal: "#0ca30c", "Abnormal resistance": "#e66767" };
-const THRESHOLD_COLOR = "#898781";
+const THRESHOLD_COLOR = "#908e87";
 const LOW_CONFIDENCE_COLOR = "#fab219";
-const GRID = "#2c2c2a";
-const AXIS = "#898781";
+const GRID = "#e3dfd3";
+const AXIS = "#908e87";
 
 function Dot({ cx, cy, payload }) {
   if (cx == null || cy == null) return null;
@@ -13,7 +13,7 @@ function Dot({ cx, cy, payload }) {
   return (
     <g>
       {payload.lowConfidence && <circle cx={cx} cy={cy} r={6} fill="none" stroke={LOW_CONFIDENCE_COLOR} strokeWidth={1.5} />}
-      <circle cx={cx} cy={cy} r={3} fill={color} stroke={payload.outOfRange ? "#fff" : "none"} strokeWidth={1} />
+      <circle cx={cx} cy={cy} r={3} fill={color} stroke={payload.outOfRange ? "#232322" : "none"} strokeWidth={1} />
     </g>
   );
 }
