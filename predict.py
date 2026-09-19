@@ -45,9 +45,9 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent
 
-# subsystem key -> (folder under backend_initial/, which pre-built version of that
+# subsystem key -> (folder under backend/, which pre-built version of that
 # subsystem's code to run, output filename, input kind). "version" names a
-# subfolder inside backend_initial/<pipeline_dir>/ that contains a run_pipeline.py
+# subfolder inside backend/<pipeline_dir>/ that contains a run_pipeline.py
 # following the --data-dir/--input/--output convention (every subsystem's
 # v2_rule-based/ does) -- swap it here to point at a different pre-built
 # pipeline without touching any orchestration logic below.
@@ -162,7 +162,7 @@ def run_subsystem(subsystem: str, cfg: dict, zip_root: Path, data_root: Path, ou
     except SystemExit as e:
         return False, str(e)
 
-    pipeline_script = REPO_ROOT / "backend_initial" / cfg["pipeline_dir"] / cfg["version"] / "run_pipeline.py"
+    pipeline_script = REPO_ROOT / "backend" / cfg["pipeline_dir"] / cfg["version"] / "run_pipeline.py"
     if not pipeline_script.exists():
         return False, f"FAILED -- pipeline script not found: {pipeline_script}"
 
