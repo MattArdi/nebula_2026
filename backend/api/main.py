@@ -37,19 +37,29 @@ STATIC_DIR = REPO_ROOT / "static"
 
 # Mirrors predict.py's SUBSYSTEMS config, so the dashboard and the CLI
 # submission path (predict.py) always run the same pipeline version --
-# except Door, deliberately: v3_adaptive is byte-identical to v2_rule-based
-# on real Test.csv (verified; see backend/Door/v3_adaptive/algorithm.md
-# Section 3.2), so running it here costs nothing and unlocks the
-# low_confidence/out_of_range diagnostics v2 doesn't compute. predict.py's
-# own SUBSYSTEMS config was updated to match, for the same reason.
+# except Door, deliberately:
+#   Door:  v3_adaptive is byte-identical to v2_rule-based on real Test.csv
+#          (verified; see backend/Door/v3_adaptive/algorithm.md Section
+#          3.2), so running it here costs nothing and unlocks the
+#          low_confidence/out_of_range diagnostics v2 doesn't compute.
+#   Rail:  v4_class_weighted -- real, validated improvement (macro F1
+#          0.8809 -> 0.8940 in CV, confirmed 0.8552 -> 0.8877 on a real
+#          held-out score; see backend/Rail Corrugation/
+#          v4_class_weighted/algorithm.md Section 5).
+#   SHM:   v3_ensemble_blend -- small, real held-out improvement (0.9652
+#          -> 0.9668), though the LOO gain behind it is noise-level and
+#          unconfirmed by an independent check; see backend/SHM/
+#          v3_ensemble_blend/algorithm.md Section 5 for the honest
+#          account of why it shipped anyway.
+# predict.py's own SUBSYSTEMS config is kept in sync with all three.
 SUBSYSTEMS = {
     "door": {"pipeline_dir": "Door", "version": "v3_adaptive",
               "output": "door_predictions.csv", "input_kind": "single"},
     "acv": {"pipeline_dir": "ACV", "version": "v2_rule-based",
              "output": "acv_predictions.csv", "input_kind": "single"},
-    "rail": {"pipeline_dir": "Rail Corrugation", "version": "v2_ensemble",
+    "rail": {"pipeline_dir": "Rail Corrugation", "version": "v4_class_weighted",
               "output": "rail_predictions.csv", "input_kind": "multi"},
-    "shm": {"pipeline_dir": "SHM", "version": "v2_rule-based",
+    "shm": {"pipeline_dir": "SHM", "version": "v3_ensemble_blend",
              "output": "shm_predictions.csv", "input_kind": "multi"},
 }
 
