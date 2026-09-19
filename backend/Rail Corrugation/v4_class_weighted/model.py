@@ -14,11 +14,21 @@ so a single scalar per model forces a compromise: whatever weight helps a
 model's strong class also inflates its vote on the classes it's weaker at.
 
 v4 replaces the 3 scalars with a 3x3 model x class weight matrix -- each
-model gets its own weight PER CLASS. Found by random search (3000 samples)
-over repeated 5x5 stratified CV, then confirmed on a second, independent
-set of CV seeds (both the search and the confirmation are in algorithm.md
-Section 5): macro F1 0.8809 -> 0.8940 (seeds 0-4), 0.8931 -> 0.9034
-(seeds 100-104) -- a robust, real gain, not a search artifact.
+model gets its own weight PER CLASS. Two such matrices were found and
+validated by random search (3000 samples) over repeated 5x5 stratified
+CV, confirmed on a second, independent set of CV seeds (algorithm.md
+Section 5 has both):
+
+    macro-F1-optimal: macro F1 0.8809 -> 0.8940 / 0.8931 -> 0.9034,
+        Side I accuracy 70.0%->68.6% / 75.7%->71.4% (slightly WORSE)
+    Side-I-priority (SHIPPED here): macro F1 0.8809 -> 0.8611 / 0.8931 ->
+        0.8683 (worse), Side I accuracy 70.0%->80.0% / 75.7%->85.7%
+        (robustly clears 80%)
+
+This module ships the Side-I-priority matrix: an explicit choice to
+prioritize catching the rarest, most safety-relevant fault class over the
+aggregate macro F1 score. See algorithm.md Section 5 for the full
+tradeoff and the macro-F1-optimal alternative.
 
 Final score for class c = sum_m WEIGHTS[m][c] * model_m.predict_proba(x)[c],
 normalized per-row to sum to 1 (a per-row positive rescale, so argmax --
@@ -43,9 +53,9 @@ RANDOM_STATE = 42
 # Column order matches LabelEncoder's alphabetical sort of the 3 class
 # strings: ["Normal", "Side I", "Side II"]. Verified against
 # label_encoder.classes_ wherever this is used (see RailEnsemble.fit).
-CAT_CLASS_WEIGHTS = np.array([4.0, 0.0, 4.0])  # Normal, Side I, Side II
-XGB_CLASS_WEIGHTS = np.array([0.0, 4.0, 0.0])
-LOG_CLASS_WEIGHTS = np.array([4.0, 0.0, 0.0])
+CAT_CLASS_WEIGHTS = np.array([2.0, 4.0, 3.0])  # Normal, Side I, Side II
+XGB_CLASS_WEIGHTS = np.array([2.0, 1.0, 2.0])
+LOG_CLASS_WEIGHTS = np.array([1.0, 4.0, 1.0])
 
 # Filenames a saved ensemble is split across: the two boosted models use
 # their own native formats (portable across library versions within a

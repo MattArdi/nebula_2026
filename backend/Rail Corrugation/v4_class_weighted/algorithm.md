@@ -61,9 +61,9 @@ other two.
 ```python
 # columns: [Normal, Side I, Side II] -- matches LabelEncoder's alphabetical
 # sort of the 3 class strings, asserted at fit time in model.py.
-CAT_CLASS_WEIGHTS = [4, 0, 4]
-XGB_CLASS_WEIGHTS = [0, 4, 0]
-LOG_CLASS_WEIGHTS = [4, 0, 0]
+CAT_CLASS_WEIGHTS = [2, 4, 3]
+XGB_CLASS_WEIGHTS = [2, 1, 2]
+LOG_CLASS_WEIGHTS = [1, 4, 1]
 ```
 
 Final score for class `c` = `sum_m WEIGHTS[m][c] * model_m.predict_proba(x)[c]`,
@@ -73,18 +73,19 @@ changes which class wins — it exists so `predict_proba()`'s output stays a
 valid probability distribution for anything downstream that reads it
 (`run_pipeline.py --diagnostics-output`).
 
-This was **not** hand-picked to match the per-class solo-accuracy table
-above (a naive reading might expect `cat` weighted on Side II, `log` on
-Side I, `xgb` on Normal, roughly matching the table) — it was found by
-random search (3000 samples over the 9-parameter space, `[0,4]` per
-entry) optimizing pooled macro F1 on the same 5x5 CV protocol, then
-independently confirmed on a second, disjoint set of CV seeds (Section 5).
-The winning matrix does route each model toward roughly the class it's
-individually strongest at, but the exact numbers came from search, not
-intuition — e.g. XGBoost (weakest solo on Side I, 61.4%) still ends up as
-the *only* model weighted on the Side I column; its raw Side I probability
-turns out to carry a cleaner signal-to-noise ratio in combination than its
-solo accuracy alone would suggest.
+This was found by random search (3000 samples over the 9-parameter space,
+`[0,4]` per entry) optimizing pooled macro F1 on the same 5x5 CV protocol,
+then independently confirmed on a second, disjoint set of CV seeds
+(Section 5) — but it is **not** the matrix that scored highest on macro F1
+in that search. It is a different, explicitly chosen matrix: the one that
+robustly clears 80% Side I accuracy on both seed sets, traded off against
+a real macro F1 cost (0.8809 → 0.8611 / 0.8931 → 0.8683). The
+macro-F1-optimal matrix found by the same search (`cat=[4,0,4],
+xgb=[0,4,0], log=[4,0,0]`, macro F1 0.8940/0.9034) is documented in
+Section 5 as the alternative — it scores higher in aggregate but leaves
+Side I at or below v3's baseline. This module ships the Side-I-priority
+choice deliberately, prioritizing catching the rarest fault class over the
+aggregate metric.
 
 Shared with `diagnostics.py`: both `RailEnsemble.predict_proba` and the CV
 self-check call the same `model_mod.combine_probas()` function, so the
@@ -122,29 +123,27 @@ to the same 49-feature set v3 ships (no feature changes in this version).
 | Config | Macro F1 (seeds 0-4) | Macro F1 (seeds 100-104) | Side I acc (0-4 / 100-104) |
 |---|---|---|---|
 | v3 shipped (scalar 2/2/1, uniform per class) | 0.8809 | 0.8931 | 70.0% / 75.7% |
-| **v4 shipped (class-weight matrix, this version)** | **0.8940** | **0.9034** | 68.6% / 71.4% |
+| macro-F1-optimal matrix (`cat=[4,0,4], xgb=[0,4,0], log=[4,0,0]`) | 0.8940 | 0.9034 | 68.6% / 71.4% |
+| **Side-I-priority matrix (SHIPPED, this version)** | 0.8611 | 0.8683 | **80.0% / 85.7%** |
 
-The gain (+0.0131 / +0.0103, both directions of the independent-seed check
-agreeing) is real and robust, not a search artifact — it was selected on
-seeds 0-4 and *independently re-measured*, not re-searched, on seeds
-100-104, and it held up. It comes from sharpening Normal and Side II, not
-from improving Side I — Side I accuracy is slightly *below* v3's baseline
-under this matrix on both seed sets.
+Both matrices are real, robust findings from the same search + independent-
+seed confirmation, not artifacts — they represent a genuine tradeoff, not
+one dominating the other. The macro-F1-optimal matrix scores higher on the
+aggregate metric but does so by sharpening Normal/Side II, leaving Side I
+at or below v3's baseline. The Side-I-priority matrix gives up 0.02-0.025
+macro F1 (still similar to v3's own baseline) in exchange for robustly
+catching 80%+ of Side I cases on both independent seed sets — a
+deliberate choice to weight minority-class detection over the aggregate
+score, made explicitly rather than by default.
 
 ### Alternatives tried and rejected, in pursuit of also fixing Side I
 
 Side I (14 of 272 training samples, the rarest class) stayed the weak
-point under every ensemble-combination variant tried. Two more aggressive
-options were tested and rejected in favor of the matrix above:
+point under every ensemble-combination variant tried. One more aggressive
+option was tested and rejected even relative to the Side-I-priority matrix
+above:
 
-1. **A Side-I-priority weight matrix** (`cat=[2,4,3], xgb=[2,1,2],
-   log=[1,4,1]`): robustly hits 80.0% / 85.7% Side I accuracy on the two
-   seed sets, but costs macro F1 down to 0.8611 / 0.8683 — worse than even
-   v3's baseline, let alone the shipped v4 matrix. Rejected: macro F1 is
-   the scored competition metric, and this trades a big chunk of it for a
-   minority-class gain.
-
-2. **Routing Side I through `EasyEnsembleClassifier`** (which solo-hits
+1. **Routing Side I through `EasyEnsembleClassifier`** (which solo-hits
    90% Side I accuracy by training each of its base learners on an
    undersampled, near-uniform-prior bootstrap): tested as a hard gate
    ("if EasyEnsemble says Side I, trust it; otherwise fall back to the
@@ -163,7 +162,7 @@ options were tested and rejected in favor of the matrix above:
    into Side I on seeds 0-4 alone (a 2.4:1 false-positive-to-true-positive
    ratio on the gate).
 
-3. **SMOTE-family oversampling** (SMOTE, Borderline-SMOTE, ADASYN,
+2. **SMOTE-family oversampling** (SMOTE, Borderline-SMOTE, ADASYN,
    SVM-SMOTE, train-fold only): best variant (SVM-SMOTE) reached 0.8699
    macro F1, below v3's 0.8808 un-resampled baseline. Rejected — with only
    ~11 Side I samples in a training fold, synthetic interpolation doesn't
