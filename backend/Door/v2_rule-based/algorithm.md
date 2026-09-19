@@ -98,7 +98,37 @@ the ranges from the 110 labelled cycles, overwriting `artifacts/` with
 the result — needed only after changing `rules.py`, or to verify the
 shipped ranges still reproduce.
 
-## 3. What was tried and did not work well
+## 3. Explainability
+
+Every prediction reduces to one number compared against one fixed constant — there is no model
+weight matrix, no feature interaction, and nothing to approximate:
+
+```
+Close: Abnormal resistance if cur_max   < 2060 mA, else Normal
+Open:  Abnormal resistance if cur_mean  > 700 mA,  else Normal
+```
+
+For any predicted cycle, "why" is fully answered by two numbers: the decision feature's actual
+value for that cycle (`cur_max` for Close, `cur_mean` for Open — both already computed by
+`rules.classify()`), and the fixed threshold it was compared against. The margin between them
+(how far past the threshold the value fell) is the natural severity signal — a cycle at 2058 mA
+and a cycle at 1200 mA are both "Abnormal," but the first is a borderline call and the second
+isn't, and that distinction is available for free from the same subtraction.
+
+The two features themselves are physically motivated, not selected by search: Close's peak
+current drop reflects the controller's stall/torque-limit logic capping current once it senses
+resistance; Open's mean-current rise reflects sustained excess draw over a longer stroke against
+an obstruction. Both are documented in Section 2's derivation, not asserted here without
+justification.
+
+**Current limitation**: `run_pipeline.py` writes only `start_time,end_time,prediction` to the
+output CSV — the decision feature's value and the threshold it was checked against are computed
+but discarded before the file is written, so reproducing "why" today means re-deriving `cur_max`/
+`cur_mean` from the raw stream rather than reading it directly off the output. Exposing those two
+numbers as extra columns would make every prediction self-explaining from the CSV alone, with no
+code change to the classification rule itself.
+
+## 4. What was tried and did not work well
 
 **An elaborate position/current segmentation rule** (direction reversal
 >200 position units; current dropping from >1500mA to <200mA, combined

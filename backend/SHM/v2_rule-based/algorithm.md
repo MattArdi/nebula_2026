@@ -33,7 +33,7 @@ test01.csv,0.032277
 | # | Pain point | Status | Mechanism |
 |---|---|---|---|
 | 1 | *"Traditional Miner's linear damage rule relies on manual rainflow counting and time-series statistics, lacking automation, computational efficiency, and real-time capability."* | **Addressed on automation and efficiency; partially on real-time** | Rainflow counting is fully automated via the `rainflow` package's ASTM E1049 implementation — no manual counting anywhere. Measured, not assumed: a full rainflow + Miner's-proxy pass over one complete 581,120-row file takes ~0.58s; a single-file prediction end-to-end (loading the shipped calibration, no `--data-dir`) took 1.32s wall time in a fresh run, most of it Python/pandas import overhead. What's not solved: this is a **batch** algorithm — every prediction reprocesses a complete raw series from scratch. Nothing here maintains rainflow's cycle-counting state incrementally as new samples arrive, which is what genuine real-time / streaming capability would require. |
-| 2 | *"It lacks machine-learning-based time-series intelligence, making it difficult to perform rapid, online fatigue damage and remaining-life assessments on massive dynamic-stress time-series data, and cannot meet the demands of dynamic, real-time intelligent evaluation."* | **Not addressed, on both halves** | ML-based intelligence is deliberately **not** used in the shipped model — tested, not skipped: Ridge and Ridge+XGBoost score 0.83–0.84 against the physics model's 0.974 under the same validation (Section 4), so adopting ML here would make predictions worse, not more intelligent, at this sample size (64 files). Remaining-life / future-damage assessment isn't built into the pipeline at all — a single static cumulative-damage number per file is all `run_pipeline.py` ever outputs. Separately explored: within-file short-horizon extrapolation degrades fast (backtested MAPE 11.8%, growing to 23.9% at the far end of the horizon), and genuine service-life forecasting across the vehicle's operating history isn't derivable from this dataset at all, since the info kit states file numbers are randomly assigned and uncorrelated with recording order or damage level — there's no time axis to forecast along. |
+| 2 | *"It lacks machine-learning-based time-series intelligence, making it difficult to perform rapid, online fatigue damage and remaining-life assessments on massive dynamic-stress time-series data, and cannot meet the demands of dynamic, real-time intelligent evaluation."* | **Not addressed, on both halves** | ML-based intelligence is deliberately **not** used in the shipped model — tested, not skipped: Ridge and Ridge+XGBoost score 0.83–0.84 against the physics model's 0.974 under the same validation (Section 5), so adopting ML here would make predictions worse, not more intelligent, at this sample size (64 files). Remaining-life / future-damage assessment isn't built into the pipeline at all — a single static cumulative-damage number per file is all `run_pipeline.py` ever outputs. Separately explored: within-file short-horizon extrapolation degrades fast (backtested MAPE 11.8%, growing to 23.9% at the far end of the horizon), and genuine service-life forecasting across the vehicle's operating history isn't derivable from this dataset at all, since the info kit states file numbers are randomly assigned and uncorrelated with recording order or damage level — there's no time axis to forecast along. |
 
 ## 3. How the algorithm works
 
@@ -61,7 +61,7 @@ beyond this.
 `C` is fit once, from the labelled training files, as the median of
 `proxy / damage` across them (a median rather than a least-squares fit,
 so a handful of large-damage files don't dominate the calibration — see
-Section 4). Prediction for any new file is then just:
+Section 5). Prediction for any new file is then just:
 
 ```
 damage_predicted = proxy / C
@@ -81,7 +81,29 @@ self-check and refits `C` on all 64 training files, overwriting
 `artifacts/` with the result — needed only after changing `physics.py`
 or `model.py`, or to verify the shipped constant still reproduces.
 
-## 4. What was tried and did not work well
+## 4. Explainability
+
+This is the most transparent of the four subsystems, by construction: `damage_predicted = proxy /
+C` is one division of two real, individually inspectable numbers, with no feature selection, no
+hidden interaction terms, and nothing approximated.
+
+`proxy` is not an abstract score — it's built directly from the rainflow-extracted cycle list
+(`(range, mean, count)` per cycle, via the standard ASTM E1049 algorithm), so "why is this file's
+damage high" is answerable by looking at which cycles have the largest `range` (since
+`proxy = Σ(count_i · range_i^5)`, a cycle's contribution grows with the 5th power of its range —
+a handful of large-range cycles can dominate the sum even if most cycles are small). `C` is a
+single fitted scalar, its value and derivation (the median of `proxy/damage` across the 64
+labelled files) fully stated in Section 3.3 — there's no second parameter, no per-file
+adjustment, and no version of this model that isn't traceable to those two numbers.
+
+**Honest limit, not a gap to fix**: explainability here is total but coarse. The model can say
+*which cycles* drove the damage number (the largest-range ones, via the fixed exponent) but has
+no per-cycle-cause explanation beyond that — there is no mechanism, by design, for attributing
+damage to anything other than a cycle's own range and count. That's the appropriate level of
+explanation for a single-parameter physics formula; a more granular story would require a model
+this dataset's 64 labelled files can't support (see Section 5's ML-regressor results).
+
+## 5. What was tried and did not work well
 
 **Generic time-domain summary statistics** (peak-to-peak range, RMS,
 standard deviation, percentiles) correlate with damage on their own, but

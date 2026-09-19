@@ -123,7 +123,7 @@ at calibration time, from that exact same 20-cycle Train window, so `local_basel
 identical by construction, not by coincidence.
 
 **Within a single run, `local_baseline` is frozen at its calibrated seed value** — it is not
-updated cycle-by-cycle as the pipeline classifies its own input; Section 4 explains why an
+updated cycle-by-cycle as the pipeline classifies its own input; Section 5 explains why an
 earlier version that did update it live was rejected. It only changes between runs, via an
 explicit `--retrain --data-dir <a door's own labelled data>`, which reseeds it from that door's
 own recent Normal history.
@@ -163,7 +163,33 @@ the 110 training cycles, per operation. A value outside that range doesn't mean 
 wrong — it means the prediction is an extrapolation rather than an interpolation, a meaningfully
 different and weaker kind of confidence worth surfacing rather than hiding behind a bare label.
 
-## 4. What was tried and did not work well
+## 4. Explainability
+
+Same auditable two-number decision as v2 (Section 3.2), with one addition: the threshold itself
+is no longer a bare constant, so "why" now has three parts instead of two — the decision value
+(`cur_max`/`cur_mean`), the *adjusted* threshold it was compared against, and the baseline that
+threshold was adjusted from. `classify_one()` already returns all of this: its second return
+value is `{"threshold_used": ..., "baseline_used": ...}`, computed fresh for every cycle, not
+just the final label.
+
+This version goes further than v2 on explainability by design — it's how pain point 1 (Section 2)
+gets addressed. Two extra, independent signals sit alongside the label:
+
+- **Low-confidence flag** (Section 3.3): "the decision value fell within the bootstrap
+  confidence half-width of the threshold" — a different resample of the same 40/15 training
+  examples could plausibly have drawn the line elsewhere, so this specific call is a close one.
+- **Out-of-range flag** (Section 3.4): "this cycle's features are outside anything Train ever
+  demonstrated" — a materially different kind of doubt (extrapolation, not proximity to a
+  boundary), and the two can fire independently, together, or not at all.
+
+Together these mean a prediction is never just a bare label — it always carries a value, a
+threshold, and (if applicable) which of two distinct kinds of doubt apply to it.
+
+**Current limitation**: exactly as in v2, `run_pipeline.py` writes only `start_time,end_time,
+prediction` — `threshold_used`, `baseline_used`, `low_confidence`, and the out-of-range flag are
+all computed per cycle but none reach the output CSV today.
+
+## 5. What was tried and did not work well
 
 **Online self-training within a single run** — updating `local_baseline`'s rolling window live,
 using every cycle the pipeline itself just classified Normal, as the stream was processed — was

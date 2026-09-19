@@ -42,7 +42,7 @@ Test22.csv,Side I
 |---|---|---|---|
 | 1 | *"The corrugation formation mechanism is influenced by many confounding factors (sleeper spacing, bogie natural frequencies, curve geometry, track elasticity), so simple threshold-based detection on raw vibration amplitude is unreliable — the characteristic signature must be separated from normal speed- and ballast-dependent vibration."* | **Partially addressed** | Not a raw-amplitude threshold at all — a 41-feature statistical ensemble. Speed confound: directly handled, every RMS feature has a speed-normalized variant (Section 3.1). Bogie natural frequency: **not represented** — resonance is inherently a frequency-domain phenomenon, and the shipped feature set has zero frequency-domain features (the pre-existing `v1_testing/features.py` did extract FFT energy bands for this; that capability was dropped when this 41-feature time-domain set was built, and no head-to-head test of the two ever ran). Sleeper spacing / curve geometry / track elasticity: **not addressable from this data at all** — the raw files carry only a speed pulse and 128 vibration/shock channels, no positional or track metadata. A dataset ceiling, not a modeling gap. |
 | 2 | *"Side I and Side II rails must be judged independently from the same recording: a file may show corrugation on one side while the other remains normal, so the model must localise the fault to a side rather than simply flagging the file as anomalous."* | **The localization half is solved; independent-per-side judgment is capped by the label schema, not the model** | Features are computed entirely separately for Side I and Side II (Section 3.1), and it's genuinely side-specific: CatBoost's own feature importance ranks `side2_vib_rms_max` and `side1_vib_rms_max` as its top two features by a wide margin, and per-class F1 (Side I 0.68, Side II 0.87) confirms real discrimination, not a majority-side default. What's capped: `Train_Labels.csv` only ever has one label per file (`Normal` / `Side I` / `Side II`, mutually exclusive) — there's no "both sides faulty" label anywhere in the data, so a file can't be judged independently faulty on both sides even in principle. Inherited from the task's own label design, not something feature or model work can change. |
-| 3 | *"The dataset is class-imbalanced — fault cases are a small minority of files, which must be accounted for in model training and evaluation."* | **Addressed** | Training: `class_weight="balanced"` (LogReg), `auto_class_weights="Balanced"` (CatBoost). Evaluation: scored by macro F1 throughout, with a per-class breakdown printed every run because, per `diagnostics.py`, aggregate accuracy would be misleading at a 234:24:14 class split. Went further than the minimum: SMOTE and Balanced Random Forest were both tried and rejected after testing showed they underperform plain class-weighting here (Section 4) — a tested conclusion, not an assumption. |
+| 3 | *"The dataset is class-imbalanced — fault cases are a small minority of files, which must be accounted for in model training and evaluation."* | **Addressed** | Training: `class_weight="balanced"` (LogReg), `auto_class_weights="Balanced"` (CatBoost). Evaluation: scored by macro F1 throughout, with a per-class breakdown printed every run because, per `diagnostics.py`, aggregate accuracy would be misleading at a 234:24:14 class split. Went further than the minimum: SMOTE and Balanced Random Forest were both tried and rejected after testing showed they underperform plain class-weighting here (Section 5) — a tested conclusion, not an assumption. |
 
 ## 3. How the algorithm works
 
@@ -102,8 +102,8 @@ the training data only. Final prediction is
 The two gradient-boosted trees get equal, double weight because they are
 individually the two strongest models and roughly comparable in
 strength; the linear model gets a single, smaller weight because on its
-own it is markedly weaker (see Section 4), but it makes decision
-boundaries the two tree models cannot (see Section 4's CatBoost/XGBoost
+own it is markedly weaker (see Section 5), but it makes decision
+boundaries the two tree models cannot (see Section 5's CatBoost/XGBoost
 asymmetry note) so it still moves the vote in cases the trees agree on
 incorrectly.
 
@@ -120,7 +120,32 @@ final fit on all of them) and overwrites `weights/` with the result —
 needed only after changing `features.py` or `model.py`, or to verify the
 shipped weights still reproduce.
 
-## 4. What was tried and did not work well
+## 4. Explainability
+
+Two independent layers, neither requiring the other:
+
+**Feature-level (always available, no model needed)**: all 41 features have a stated physical
+meaning (Section 3.1) — which side, which signal kind (vibration/shock), which statistic
+(RMS/kurtosis/crest/peak-to-peak), mean or max across that side's 4 bearing positions, speed-
+normalized or not. For any file, computing and inspecting these 41 numbers directly (e.g. is
+`side1_vib_rms_max` far above `side2_vib_rms_max`) already tells a physically-grounded story
+about which side is worse, independent of what the ensemble ultimately predicts.
+
+**Model-level**: CatBoost and XGBoost both expose built-in feature importances from training,
+which is how Section 2's localization claim is validated in the first place — `side2_vib_rms_max`
+and `side1_vib_rms_max` rank as the two most important features overall, confirming the model
+leans on genuinely side-specific signal rather than some confound. `predict_proba()` is also
+already available on the fitted ensemble (Section 3.2) — every prediction is one of three class
+probabilities away from being retrievable, not just a hard label.
+
+**Current limitation**: feature importance as computed today is *global* (which features matter
+most across all training files), not *local* (which features drove this one specific file's
+prediction) — and `run_pipeline.py` calls `.predict()`, discarding the probability distribution
+`predict_proba()` already computes internally. A per-prediction explanation (e.g. SHAP values, or
+simply exposing the class-probability margin) is a small addition on top of an already-fitted
+model, not a retraining effort.
+
+## 5. What was tried and did not work well
 
 **A 12-model comparison** (Random Forest, Balanced Random Forest, plain
 and SMOTE-augmented XGBoost/LightGBM/CatBoost, Logistic Regression, and

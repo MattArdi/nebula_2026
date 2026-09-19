@@ -57,8 +57,8 @@ explicitly.
 
 | # | Pain point | Status | Mechanism |
 |---|---|---|---|
-| 1 | *"Only a small number of documented fault cases exist, limiting how much a data-driven model can learn from typical failure signatures compared with the other subsystems' datasets."* | **Partially addressed** | Every constant (`k`, half-life, window, `TIE_EPSILON`) comes from SPC theory or explicit sensitivity testing (Section 4), not fitted from the 6 training cases — the algorithm never needed abundant data to learn a failure signature in the first place. What's missing: no bootstrap-style confidence quantification on the calibration itself. `margin_report()` compares a new case's margin against only 6 observed training margins, with no measure of how reliable that comparison is at this sample size — unlike the Door subsystem's `v3_adaptive`, which bootstrap-resamples its own scarce training set to get an explicit confidence half-width. |
-| 2 | *"Diagnosis must distinguish genuine leakage-induced anomalies from normal cyclic variation in ACV control across the 8 cars of a train, and correctly localise the fault to the affected car — not merely detect that a fault exists somewhere on the train."* | **Partially addressed** | Localization is fully solved: the entire output is a per-car ranking, not a fault/no-fault flag, validated at 100% (the correct car ranked 1st in all 6 training cases). Distinguishing genuine anomaly from normal cyclic variation is handled by design — cross-sectional median-differencing cancels shared/cyclic effects across the fleet, and CUSUM's slack (`k=0.5σ`) absorbs routine jitter, so only a sustained, one-directional deviation accumulates. What's not solved: Section 4 documents, explicitly, that CUSUM cannot distinguish an actual refrigerant leak from any other cause of a sustained, non-random per-car offset (physical position on the train, occupancy) using temperature alone — the algorithm ranks by "most anomalous relative to its peers," not by confirmed leak causation. |
+| 1 | *"Only a small number of documented fault cases exist, limiting how much a data-driven model can learn from typical failure signatures compared with the other subsystems' datasets."* | **Partially addressed** | Every constant (`k`, half-life, window, `TIE_EPSILON`) comes from SPC theory or explicit sensitivity testing (Section 5), not fitted from the 6 training cases — the algorithm never needed abundant data to learn a failure signature in the first place. What's missing: no bootstrap-style confidence quantification on the calibration itself. `margin_report()` compares a new case's margin against only 6 observed training margins, with no measure of how reliable that comparison is at this sample size — unlike the Door subsystem's `v3_adaptive`, which bootstrap-resamples its own scarce training set to get an explicit confidence half-width. |
+| 2 | *"Diagnosis must distinguish genuine leakage-induced anomalies from normal cyclic variation in ACV control across the 8 cars of a train, and correctly localise the fault to the affected car — not merely detect that a fault exists somewhere on the train."* | **Partially addressed** | Localization is fully solved: the entire output is a per-car ranking, not a fault/no-fault flag, validated at 100% (the correct car ranked 1st in all 6 training cases). Distinguishing genuine anomaly from normal cyclic variation is handled by design — cross-sectional median-differencing cancels shared/cyclic effects across the fleet, and CUSUM's slack (`k=0.5σ`) absorbs routine jitter, so only a sustained, one-directional deviation accumulates. What's not solved: Section 5 documents, explicitly, that CUSUM cannot distinguish an actual refrigerant leak from any other cause of a sustained, non-random per-car offset (physical position on the train, occupancy) using temperature alone — the algorithm ranks by "most anomalous relative to its peers," not by confirmed leak causation. |
 
 ## 3. How the algorithm works
 
@@ -134,7 +134,29 @@ recomputes the margins from the 6 labelled cases, overwriting
 `artifacts/` with the result — needed only after changing `ranking.py`,
 or to verify the shipped margins still reproduce.
 
-## 4. What was tried and did not work well
+## 4. Explainability
+
+`rank_cars()` never collapses straight to a final order — it returns the full breakdown behind
+it: `primary` (each car's CUSUM score), `secondary` (each car's mode-transition count, used only
+in near-ties), `margin` (the gap between rank 1 and rank 2), and `excluded` (cars with no usable
+data). So for any car in the output, "why is it ranked where it is" is answered by its own
+primary score relative to the others, whether it was close enough to trigger the Step 4 tiebreak,
+and by how much its score cleared (or trailed) the runner-up.
+
+The primary score itself is not a single opaque statistic — it's the endpoint of a three-step
+chain, each step independently inspectable: the per-timestep gap from the fleet median (Step 1),
+that gap standardized by the local spread (Step 2), and the running CUSUM total those standardized
+values accumulate into (Step 3). Because `cusum_score()` computes that running total one timestep
+at a time, the *entire trajectory* — not just its final value — exists in memory during a run, so
+"when in the file did this car's score start climbing" is answerable, not just "what is it now."
+
+**Current limitation**: `run_pipeline.py` writes only `file_id,ranked_cars` — `primary`,
+`secondary`, `margin`, and the CUSUM trajectory are all computed but discarded before the output
+is written. Exposing them (the final scores and margin cheaply, the full trajectory with a bit
+more work) would make the ranking's reasoning readable from the output alone, not just from
+re-running the pipeline with instrumentation.
+
+## 5. What was tried and did not work well
 
 **Fixed-window features (whole-file mean deviation, or a fixed trailing
 fraction of the file) instead of CUSUM.** Each gets every training
