@@ -1,6 +1,6 @@
 import { ResponsiveContainer, ComposedChart, Area, Line, XAxis, YAxis, Tooltip, CartesianGrid } from "recharts";
 import { Card } from "./ui.jsx";
-import { resampleCycleSignal } from "../subsystems/door/doorModel.js";
+import { resampleCycleSignal } from "../lib/signalResample.js";
 
 const STATUS_COLOR = { Normal: "#0ca30c", "Abnormal resistance": "#e66767" };
 const REFERENCE_COLOR = "#898781";
@@ -99,14 +99,28 @@ function SignalPanel({ segment, reference, dataKey, label, unit }) {
 export default function CycleSignalDetail({ segment, normalAverage }) {
   if (!segment) return null;
   const color = STATUS_COLOR[segment.prediction] ?? REFERENCE_COLOR;
-  const reference = normalAverage?.[segment.operation] ?? [];
+  const reference = segment.operation ? normalAverage?.[segment.operation] ?? [] : [];
+
+  if (!segment.rawSeries?.length) {
+    return (
+      <Card>
+        <div className="text-sm font-medium text-ink-primary mb-1">
+          {segment.prediction} cycle — {formatStart(segment)}
+        </div>
+        <p className="text-xs text-ink-muted py-8 text-center">
+          Raw signal isn't available for this cycle (the client-side cycle slicing didn't line up with the
+          backend's segmentation for this file).
+        </p>
+      </Card>
+    );
+  }
 
   return (
     <Card>
       <div className="flex flex-wrap items-center justify-between gap-2 mb-1">
         <div className="text-sm font-medium text-ink-primary">{segment.operation} cycle — {formatStart(segment)}</div>
         <div className="text-xs" style={{ color }}>
-          {segment.prediction} ({(segment.probAbnormal * 100).toFixed(0)}% abnormal)
+          {segment.prediction}
         </div>
       </div>
 

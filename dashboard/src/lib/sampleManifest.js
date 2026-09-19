@@ -10,6 +10,7 @@ export const DOOR_SAMPLE = { url: "/sample-data/door/Train.csv", name: "Train.cs
 export const DOOR_ANSWERS_URL = "/sample-data/door/Train_Segments_Answer.csv";
 
 export const ACV_SAMPLE = { url: "/sample-data/acv/acv_case_01.xlsx", name: "acv_case_01.xlsx" };
+export const ACV_LABELS_URL = "/sample-data/acv/Train_Labels.csv";
 
 // 4 Normal / 4 Side I / 4 Side II — a curated, class-balanced subset of the
 // 272 labelled Train files (the real class split is heavily imbalanced,

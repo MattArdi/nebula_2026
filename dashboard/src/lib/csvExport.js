@@ -16,8 +16,14 @@ export function toCsv(headers, rows) {
 }
 
 export function downloadCsv(filename, headers, rows) {
-  const csv = toCsv(headers, rows);
-  const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
+  downloadCsvText(filename, toCsv(headers, rows));
+}
+
+// Same download mechanics as downloadCsv, but for CSV text the caller
+// already has (e.g. the backend's own submission-format output) rather
+// than headers/rows to build it from.
+export function downloadCsvText(filename, csvText) {
+  const blob = new Blob([csvText], { type: "text/csv;charset=utf-8" });
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
   a.href = url;

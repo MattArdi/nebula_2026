@@ -1,22 +1,20 @@
 import { useEffect, useState } from "react";
 import Papa from "papaparse";
-import { parseNumericMatrix } from "../../lib/parseNumericCsv.js";
 import BatchSubsystemPage from "../../components/BatchSubsystemPage.jsx";
-import DamageProgressChart from "../../components/DamageProgressChart.jsx";
 import ShmCombinedChart from "../../components/ShmCombinedChart.jsx";
-import { predictDamage, cumulativeDamageOverProgress } from "./shmModel.js";
+import { predictShm } from "../../lib/apiClient.js";
 import { SHM_SAMPLES, SHM_LABELS_URL } from "../../lib/sampleManifest.js";
 
+// The backend runs rainflow counting + Miner's-rule damage directly on the
+// raw file — no client-side parsing needed.
 async function parseShmFile(file) {
-  const rows = await parseNumericMatrix(file);
-  const series = rows.map((r) => r[0]).filter((v) => typeof v === "number" && !Number.isNaN(v));
-  if (!series.length) throw new Error("No numeric readings found in file.");
-  return series;
+  return file;
 }
 
-async function predictFile(series) {
-  const damage = predictDamage(series);
-  return { prediction: damage.toFixed(4) };
+async function predictFile(file) {
+  const result = await predictShm([file]);
+  const row = result.rows[0]; // { file_id, prediction }
+  return { prediction: row.prediction };
 }
 
 function tierFor(damage) {
@@ -88,27 +86,6 @@ function renderCell(row) {
   );
 }
 
-function defaultSelect(rows) {
-  return [...rows].sort((a, b) => Number(b.prediction) - Number(a.prediction))[0]?.file_id;
-}
-
-function renderDetail(row) {
-  const points = cumulativeDamageOverProgress(row.parsed, { chunks: 20 });
-  const truthNote =
-    row.trueLabel != null
-      ? ` True damage (Train_Labels.csv): ${row.trueLabel} — predicted ${row.prediction} (${row.matchesTruth ? "within 15%" : "off by more than 15%"}).`
-      : "";
-
-  return (
-    <DamageProgressChart
-      title={`${row.file_id} — cumulative damage build-up`}
-      subtitle={`Cumulative Miner's-rule damage recomputed on successively longer prefixes of this recording.${truthNote}`}
-      data={points}
-      caveat="X-axis is fraction of this recording elapsed, not real time — SHM's sampling rate isn't published."
-    />
-  );
-}
-
 function renderCombined(results) {
   return (
     <ShmCombinedChart
@@ -148,10 +125,10 @@ export default function ShmPage({ onSummary }) {
         <>
           Drop one or many dynamic-stress time-series files (e.g. <code className="text-ink-secondary">train01.csv</code>
           ...<code className="text-ink-secondary">train64.csv</code>, or a .zip of several). Each file runs through
-          rainflow cycle counting and Miner's linear damage rule to predict a cumulative fatigue-damage number.
-          Opens pre-loaded with 16 labelled Train files, checked against{" "}
-          <code className="text-ink-secondary">Train_Labels.csv</code>. Click a row for that file's damage build-up
-          chart. Drop your own files (Train or Test) to replace them.
+          the real validated pipeline (rainflow cycle counting + Miner's linear damage rule) to predict a cumulative
+          fatigue-damage number. Check against{" "}
+          <code className="text-ink-secondary">Train_Labels.csv</code> by dropping Train files, or drop Test files
+          for a real submission-ready run.
         </>
       }
       csvFilename="shm_predictions.csv"
@@ -167,8 +144,6 @@ export default function ShmPage({ onSummary }) {
       computeEntities={computeEntities}
       renderCell={renderCell}
       renderCombined={renderCombined}
-      renderDetail={renderDetail}
-      defaultSelect={defaultSelect}
       onSummary={onSummary}
     />
   );

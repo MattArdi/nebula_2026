@@ -24,11 +24,9 @@ function ChartTooltip({ active, payload }) {
 
 /**
  * Every currently-loaded file plotted together as one bar each: bar height
- * is the classifier's own P(Side I) − P(Side II) margin (not a raw signal
- * replay) — near 0 for Normal, strongly positive for Side I, strongly
- * negative for Side II, validated against the real bundled Train files.
- * Replaces the old per-file raw-vibration waveform view, which didn't
- * generalize across files the way this combined comparison does.
+ * encodes the predicted class (+1 Side I, 0 Normal, −1 Side II) — the
+ * ensemble's own class-probability margin isn't exposed by the submission
+ * CSV, so this is categorical rather than a continuous confidence score.
  */
 export default function RailSeverityChart({ title, subtitle, results, caveat }) {
   if (!results?.length) return null;

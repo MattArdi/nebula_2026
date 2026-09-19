@@ -3,8 +3,9 @@ import Papa from "papaparse";
 import { FileDrop, PrimaryButton, Card, StatCard, LabelBadge } from "../../components/ui.jsx";
 import SegmentTimeline from "../../components/SegmentTimeline.jsx";
 import CycleSignalDetail from "../../components/CycleSignalDetail.jsx";
-import { downloadCsv } from "../../lib/csvExport.js";
-import { runDoorPipeline, averageNormalCycleSignal } from "./doorModel.js";
+import { downloadCsvText } from "../../lib/csvExport.js";
+import { predictDoor } from "../../lib/apiClient.js";
+import { groupDoorCycles, getOperation, parseDoorTimestamp, averageNormalCycleSignal } from "../../lib/signalResample.js";
 import { fetchAsFile } from "../../lib/sampleFiles.js";
 import { DOOR_SAMPLE, DOOR_ANSWERS_URL } from "../../lib/sampleManifest.js";
 
@@ -12,8 +13,9 @@ function formatTimeOfDay(ms) {
   return new Date(ms).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" });
 }
 
-// Ground truth (Train_Segments_Answer.csv) only exists for Train.csv, the
-// bundled default — matched to predicted segments by order.
+// Ground truth (Train_Segments_Answer.csv) only exists for Train.csv, so
+// this quietly resolves to null for any other file — the caller only uses
+// it once the row count also lines up with what was predicted.
 async function fetchGroundTruth() {
   const res = await fetch(DOOR_ANSWERS_URL);
   if (!res.ok) return null;
@@ -33,15 +35,17 @@ export default function DoorPage({ onSummary }) {
   const [status, setStatus] = useState(null); // { type, message }
   const [segments, setSegments] = useState(null);
   const [groundTruth, setGroundTruth] = useState(null); // array aligned by index, or null
+  const [csvText, setCsvText] = useState(null);
   const [busy, setBusy] = useState(false);
   const [selectedCycle, setSelectedCycle] = useState(null);
   const autoLoadedRef = useRef(false);
 
-  function runFile(file, { withGroundTruth = false } = {}) {
+  function runFile(file) {
     setFileName(file.name);
     setStatus(null);
     setSegments(null);
     setGroundTruth(null);
+    setCsvText(null);
     setSelectedCycle(null);
     setBusy(true);
 
@@ -54,25 +58,42 @@ export default function DoorPage({ onSummary }) {
           if (!results.data?.length) {
             throw new Error(results.errors?.[0]?.message ?? "No data rows found.");
           }
-          const predicted = runDoorPipeline(results.data);
-          setSegments(predicted);
-          const abnormal = predicted.filter((s) => s.prediction === "Abnormal resistance").length;
 
-          let truth = null;
+          // The real prediction comes from the backend (the validated
+          // Python pipeline); the client also chunks the same raw rows
+          // into cycles (mirroring the backend's own gap rule) purely to
+          // have a raw signal to chart and to read the Open/Close flag off.
+          const [backendResult, truth] = await Promise.all([predictDoor(file), fetchGroundTruth()]);
+          const predicted = backendResult.rows; // [{ start_time, end_time, prediction }]
+          const cycles = groupDoorCycles(results.data);
+
+          const alignedByCount = cycles.length === predicted.length;
+          const segs = predicted.map((p, i) => {
+            const chunk = alignedByCount ? cycles[i] : null;
+            return {
+              ...p,
+              start_ts: parseDoorTimestamp(p.start_time),
+              end_ts: parseDoorTimestamp(p.end_time),
+              operation: chunk ? getOperation(chunk) : null,
+              rawSeries: chunk,
+            };
+          });
+
+          setSegments(segs);
+          setCsvText(backendResult.csv);
+          const abnormal = segs.filter((s) => s.prediction === "Abnormal resistance").length;
+
           let accuracyMsg = "";
-          if (withGroundTruth) {
-            truth = await fetchGroundTruth();
-            if (truth && truth.length === predicted.length) {
-              setGroundTruth(truth);
-              const correct = predicted.filter((s, i) => s.prediction === truth[i].status).length;
-              accuracyMsg = ` — ${correct}/${predicted.length} match Train_Segments_Answer.csv`;
-            }
+          if (truth && truth.length === segs.length) {
+            setGroundTruth(truth);
+            const correct = segs.filter((s, i) => s.prediction === truth[i].status).length;
+            accuracyMsg = ` — ${correct}/${segs.length} match Train_Segments_Answer.csv`;
           }
 
           setStatus({
             type: "ok",
-            message: `Found ${predicted.length} cycles (${abnormal} abnormal-resistance, ${
-              predicted.length - abnormal
+            message: `Found ${segs.length} cycles (${abnormal} abnormal-resistance, ${
+              segs.length - abnormal
             } normal) from ${results.data.length} rows${accuracyMsg}.`,
           });
         } catch (err) {
@@ -94,7 +115,7 @@ export default function DoorPage({ onSummary }) {
     (async () => {
       try {
         const file = await fetchAsFile(DOOR_SAMPLE.url, DOOR_SAMPLE.name);
-        runFile(file, { withGroundTruth: true });
+        runFile(file);
       } catch (err) {
         setStatus({ type: "error", message: `Could not load bundled sample data: ${err.message}` });
       }
@@ -103,16 +124,7 @@ export default function DoorPage({ onSummary }) {
   }, []);
 
   function handleDownload() {
-    downloadCsv(
-      "door_predictions.csv",
-      ["start_time", "end_time", "prediction", "confidence"],
-      segments.map((s) => ({
-        start_time: s.start_time,
-        end_time: s.end_time,
-        prediction: s.prediction,
-        confidence: s.confidence.toFixed(3),
-      }))
-    );
+    downloadCsvText("door_predictions.csv", csvText);
   }
 
   const abnormalCount = segments ? segments.filter((s) => s.prediction === "Abnormal resistance").length : 0;
@@ -134,15 +146,13 @@ export default function DoorPage({ onSummary }) {
       ],
       // Health = % of cycles found NOT abnormal — real, from the loaded file.
       health: ((segments.length - abnormalCount) / segments.length) * 100,
-      // Per-cycle breakdown for the Overview's entity view — health here is
-      // always "probability this cycle is Normal", regardless of which
-      // class was actually predicted, so it's on a consistent 0-100 scale
-      // across entities (the underlying `confidence` field is instead
-      // "probability of whichever class was predicted").
+      // The rule-based classifier has no calibrated confidence, so
+      // per-cycle health is binary (100 if Normal, 0 if Abnormal), same
+      // convention as the other subsystems that lack a graded score.
       entities: segments.map((s, i) => ({
         id: `Cycle ${i + 1} (${s.start_time})`,
         label: s.prediction,
-        value: s.prediction === "Normal" ? s.confidence * 100 : (1 - s.confidence) * 100,
+        value: s.prediction === "Normal" ? 100 : 0,
         valueType: "health",
       })),
       // Preview rows in the exact door_predictions.csv schema (start_time,
@@ -166,8 +176,9 @@ export default function DoorPage({ onSummary }) {
           Finds every door-open/close cycle in a continuous door-controller stream, then classifies each cycle as{" "}
           <span className="text-ink-secondary">Normal</span> or{" "}
           <span className="text-ink-secondary">Abnormal resistance</span> from its motor current and back-EMF
-          profile. Opens pre-loaded with the labelled <code className="text-ink-secondary">Train.csv</code> stream,
-          checked against <code className="text-ink-secondary">Train_Segments_Answer.csv</code>. Drop your own{" "}
+          profile, using the real validated Door pipeline. Opens pre-loaded with the labelled{" "}
+          <code className="text-ink-secondary">Train.csv</code> stream, checked against{" "}
+          <code className="text-ink-secondary">Train_Segments_Answer.csv</code>. Drop your own{" "}
           <code className="text-ink-secondary">.csv</code> stream (Train or the real Test.csv) to replace it.
         </p>
       </Card>
@@ -239,7 +250,6 @@ export default function DoorPage({ onSummary }) {
                   <th className="px-4 py-2 font-normal">Start time</th>
                   <th className="px-4 py-2 font-normal">End time</th>
                   <th className="px-4 py-2 font-normal">Prediction</th>
-                  <th className="px-4 py-2 font-normal">Confidence</th>
                   {groundTruth && <th className="px-4 py-2 font-normal">True label</th>}
                 </tr>
               </thead>
@@ -255,7 +265,6 @@ export default function DoorPage({ onSummary }) {
                       <td className="px-4 py-2">
                         <LabelBadge label={s.prediction} />
                       </td>
-                      <td className="px-4 py-2 text-ink-muted tabular-nums">{(s.confidence * 100).toFixed(0)}%</td>
                       {groundTruth && (
                         <td className="px-4 py-2">
                           <span className={match ? "text-status-good" : "text-status-critical"}>

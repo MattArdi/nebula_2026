@@ -27,10 +27,9 @@ function LegendDot({ color, label }) {
 
 /**
  * A Gantt-style timeline of observed door cycles, split into an Open lane
- * and a Close lane (the dataset's own "Door is opening"/"Door is closing"
- * flags, not predicted — see doorModel.js's classifyOperation), so an Open
- * cycle and the Close cycle that follows it don't visually collide on one
- * row.
+ * and a Close lane (the dataset's own "Close command" flag, not predicted),
+ * so an Open cycle and the Close cycle that follows it don't visually
+ * collide on one row.
  *
  * Click a bar to select it (for a detail panel elsewhere on the page);
  * hover shows a quick tooltip either way.
@@ -122,7 +121,6 @@ export default function SegmentTimeline({ title, subtitle, historical, xFormat, 
               {xFormat ? xFormat(hover.seg.start_ts) : hover.seg.start_ts} –{" "}
               {xFormat ? xFormat(hover.seg.end_ts) : hover.seg.end_ts}
             </div>
-            <div className="text-ink-muted">probability abnormal: {(hover.seg.probAbnormal * 100).toFixed(0)}%</div>
             <div className="text-ink-muted mt-0.5">Click for signal detail</div>
           </div>
         )}

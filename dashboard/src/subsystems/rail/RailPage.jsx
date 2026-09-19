@@ -2,33 +2,25 @@ import { useEffect, useState } from "react";
 import Papa from "papaparse";
 import BatchSubsystemPage from "../../components/BatchSubsystemPage.jsx";
 import RailSeverityChart from "../../components/RailSeverityChart.jsx";
-import { predictRailFile } from "./railModel.js";
+import { predictRail } from "../../lib/apiClient.js";
 import { RAIL_SAMPLES, RAIL_LABELS_URL } from "../../lib/sampleManifest.js";
 
-function parseRailFile(file) {
-  return new Promise((resolve, reject) => {
-    Papa.parse(file, {
-      header: true,
-      dynamicTyping: true,
-      skipEmptyLines: true,
-      worker: true,
-      complete: (results) => {
-        // PapaParse's "errors" include harmless notices — only an empty
-        // result actually means failure.
-        if (!results.data?.length) {
-          const msg = results.errors?.[0]?.message ?? "No data rows found.";
-          return reject(new Error(msg));
-        }
-        resolve(results.data.map((r) => Object.values(r)));
-      },
-      error: reject,
-    });
-  });
+// The backend needs the raw File (feature extraction happens server-side,
+// in the real validated pipeline) — no client-side parsing needed.
+async function parseRailFile(file) {
+  return file;
 }
 
-async function predictFile(rows) {
-  const { prediction, severityScore } = predictRailFile(rows);
-  return { prediction, severityScore };
+// The ensemble's own class-probability margin isn't exposed by the
+// submission CSV (file_id, prediction only), so severity here is the
+// predicted class encoded on the chart's existing +1/0/-1 scale, not a
+// continuous confidence score.
+const SEVERITY = { Normal: 0, "Side I": 1, "Side II": -1 };
+
+async function predictFile(file) {
+  const result = await predictRail([file]);
+  const row = result.rows[0]; // { file_id, prediction }
+  return { prediction: row.prediction, severityScore: SEVERITY[row.prediction] ?? 0 };
 }
 
 function computeStats(results) {
@@ -73,7 +65,7 @@ function renderCombined(results) {
   return (
     <RailSeverityChart
       title="All files — Side I / Side II severity"
-      subtitle="Every loaded file as one bar: height is the classifier's own P(Side I) − P(Side II) margin — near 0 for Normal, up for Side I, down for Side II."
+      subtitle="Every loaded file as one bar: height is the predicted class (+1 Side I, 0 Normal, −1 Side II)."
       results={results}
       caveat="Each file is an isolated 1-second snapshot — bars are ordered by load order only, not a real timeline."
     />
@@ -107,11 +99,11 @@ export default function RailPage({ onSummary }) {
       description={
         <>
           Drop one or many axle-box vibration/shock recordings (e.g. <code className="text-ink-secondary">Train1.csv</code>
-          ...<code className="text-ink-secondary">Train272.csv</code>, or a .zip of several). Each file's vibration
-          features are extracted separately for the Side I and Side II rails, then classified as Normal, Side I, or
-          Side II corrugation. Opens pre-loaded with 12 labelled Train files, checked against{" "}
-          <code className="text-ink-secondary">Train_Labels.csv</code>. Drop your own files (Train or Test) to
-          replace them.
+          ...<code className="text-ink-secondary">Train272.csv</code>, or a .zip of several). Each file runs through
+          the real validated ensemble (feature extraction + CatBoost/XGBoost/LogReg soft voting) and is classified
+          as Normal, Side I, or Side II corrugation. Check against{" "}
+          <code className="text-ink-secondary">Train_Labels.csv</code> by dropping Train files, or drop Test files
+          for a real submission-ready run.
         </>
       }
       csvFilename="rail_predictions.csv"
