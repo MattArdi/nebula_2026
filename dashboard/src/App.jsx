@@ -1,11 +1,13 @@
 import { useState } from "react";
-import { Sidebar, MobileNav, TopBar } from "./components/Layout.jsx";
+import { TopBar, TopNav } from "./components/Layout.jsx";
 import Window from "./components/Window.jsx";
+import LoginPage from "./components/LoginPage.jsx";
 import Home from "./subsystems/Home.jsx";
 import DoorPage from "./subsystems/door/DoorPage.jsx";
 import AcvPage from "./subsystems/acv/AcvPage.jsx";
 import RailPage from "./subsystems/rail/RailPage.jsx";
 import ShmPage from "./subsystems/shm/ShmPage.jsx";
+import { getAuthedUser, login, logout } from "./lib/auth.js";
 
 const TITLES = {
   door: "Door",
@@ -24,6 +26,7 @@ const DEFAULT_WINDOWS = {
 };
 
 export default function App() {
+  const [user, setUser] = useState(() => getAuthedUser());
   const [windows, setWindows] = useState(DEFAULT_WINDOWS);
   const [zCounter, setZCounter] = useState(1);
   // Each subsystem page reports its own latest summary up here once it has
@@ -68,74 +71,88 @@ export default function App() {
 
   const openIds = new Set(Object.keys(windows).filter((id) => windows[id].open));
 
+  if (!user) {
+    return (
+      <LoginPage
+        onLogin={(u) => {
+          login(u);
+          setUser(u);
+        }}
+      />
+    );
+  }
+
   return (
-    <div className="flex h-screen">
-      <Sidebar openIds={openIds} onNavigate={openWindow} />
+    <div className="flex h-screen flex-col">
+      <TopBar
+        title="Train Condition Monitoring"
+        subtitle="Select a tab below to open its window"
+        user={user}
+        onLogout={() => {
+          logout();
+          setUser(null);
+        }}
+      />
+      <TopNav openIds={openIds} onNavigate={openWindow} />
 
-      <div className="flex-1 flex flex-col min-w-0">
-        <TopBar title="Train Condition Monitoring" subtitle="Click a subsystem in the sidebar to open its window" />
+      {/* The desktop: Overview is the permanent backdrop; every subsystem
+          page mounts once, immediately, and stays mounted for the whole
+          session (Window only toggles display:none) — so opening,
+          closing, and reopening a window never re-fetches or re-runs a
+          pipeline that already ran, same as the earlier tab-based design. */}
+      <main className="flex-1 relative overflow-hidden bg-surface-page">
+        <div className="absolute inset-0 overflow-y-auto px-6 py-5">
+          <Home onNavigate={openWindow} summaries={summaries} />
+        </div>
 
-        {/* The desktop: Overview is the permanent backdrop; every subsystem
-            page mounts once, immediately, and stays mounted for the whole
-            session (Window only toggles display:none) — so opening,
-            closing, and reopening a window never re-fetches or re-runs a
-            pipeline that already ran, same as the earlier tab-based design. */}
-        <main className="flex-1 relative overflow-hidden bg-surface-page">
-          <div className="absolute inset-0 overflow-y-auto px-6 py-5">
-            <Home onNavigate={openWindow} summaries={summaries} />
-          </div>
+        <Window
+          title={TITLES.door}
+          {...windows.door}
+          onClose={() => closeWindow("door")}
+          onFocus={() => bringToFront("door")}
+          onMove={(x, y) => moveWindow("door", x, y)}
+          onResize={(w, h) => resizeWindow("door", w, h)}
+          onToggleMaximize={() => toggleMaximize("door")}
+        >
+          <DoorPage onSummary={(s) => reportSummary("door", s)} />
+        </Window>
 
-          <Window
-            title={TITLES.door}
-            {...windows.door}
-            onClose={() => closeWindow("door")}
-            onFocus={() => bringToFront("door")}
-            onMove={(x, y) => moveWindow("door", x, y)}
-            onResize={(w, h) => resizeWindow("door", w, h)}
-            onToggleMaximize={() => toggleMaximize("door")}
-          >
-            <DoorPage onSummary={(s) => reportSummary("door", s)} />
-          </Window>
+        <Window
+          title={TITLES.acv}
+          {...windows.acv}
+          onClose={() => closeWindow("acv")}
+          onFocus={() => bringToFront("acv")}
+          onMove={(x, y) => moveWindow("acv", x, y)}
+          onResize={(w, h) => resizeWindow("acv", w, h)}
+          onToggleMaximize={() => toggleMaximize("acv")}
+        >
+          <AcvPage onSummary={(s) => reportSummary("acv", s)} />
+        </Window>
 
-          <Window
-            title={TITLES.acv}
-            {...windows.acv}
-            onClose={() => closeWindow("acv")}
-            onFocus={() => bringToFront("acv")}
-            onMove={(x, y) => moveWindow("acv", x, y)}
-            onResize={(w, h) => resizeWindow("acv", w, h)}
-            onToggleMaximize={() => toggleMaximize("acv")}
-          >
-            <AcvPage onSummary={(s) => reportSummary("acv", s)} />
-          </Window>
+        <Window
+          title={TITLES.rail}
+          {...windows.rail}
+          onClose={() => closeWindow("rail")}
+          onFocus={() => bringToFront("rail")}
+          onMove={(x, y) => moveWindow("rail", x, y)}
+          onResize={(w, h) => resizeWindow("rail", w, h)}
+          onToggleMaximize={() => toggleMaximize("rail")}
+        >
+          <RailPage onSummary={(s) => reportSummary("rail", s)} />
+        </Window>
 
-          <Window
-            title={TITLES.rail}
-            {...windows.rail}
-            onClose={() => closeWindow("rail")}
-            onFocus={() => bringToFront("rail")}
-            onMove={(x, y) => moveWindow("rail", x, y)}
-            onResize={(w, h) => resizeWindow("rail", w, h)}
-            onToggleMaximize={() => toggleMaximize("rail")}
-          >
-            <RailPage onSummary={(s) => reportSummary("rail", s)} />
-          </Window>
-
-          <Window
-            title={TITLES.shm}
-            {...windows.shm}
-            onClose={() => closeWindow("shm")}
-            onFocus={() => bringToFront("shm")}
-            onMove={(x, y) => moveWindow("shm", x, y)}
-            onResize={(w, h) => resizeWindow("shm", w, h)}
-            onToggleMaximize={() => toggleMaximize("shm")}
-          >
-            <ShmPage onSummary={(s) => reportSummary("shm", s)} />
-          </Window>
-        </main>
-
-        <MobileNav openIds={openIds} onNavigate={openWindow} />
-      </div>
+        <Window
+          title={TITLES.shm}
+          {...windows.shm}
+          onClose={() => closeWindow("shm")}
+          onFocus={() => bringToFront("shm")}
+          onMove={(x, y) => moveWindow("shm", x, y)}
+          onResize={(w, h) => resizeWindow("shm", w, h)}
+          onToggleMaximize={() => toggleMaximize("shm")}
+        >
+          <ShmPage onSummary={(s) => reportSummary("shm", s)} />
+        </Window>
+      </main>
     </div>
   );
 }
