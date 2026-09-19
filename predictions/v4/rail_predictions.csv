@@ -1,6 +1,6 @@
 file_id,prediction
 Test1.csv,Normal
-Test10.csv,Side I
+Test10.csv,Normal
 Test11.csv,Normal
 Test12.csv,Normal
 Test13.csv,Side I
@@ -29,7 +29,7 @@ Test33.csv,Side I
 Test34.csv,Normal
 Test35.csv,Normal
 Test36.csv,Normal
-Test37.csv,Side II
+Test37.csv,Normal
 Test38.csv,Normal
 Test39.csv,Normal
 Test4.csv,Normal
@@ -38,7 +38,7 @@ Test41.csv,Normal
 Test42.csv,Normal
 Test43.csv,Side II
 Test44.csv,Normal
-Test45.csv,Side I
+Test45.csv,Normal
 Test46.csv,Side I
 Test47.csv,Normal
 Test48.csv,Normal

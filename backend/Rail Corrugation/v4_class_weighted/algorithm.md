@@ -61,9 +61,9 @@ other two.
 ```python
 # columns: [Normal, Side I, Side II] -- matches LabelEncoder's alphabetical
 # sort of the 3 class strings, asserted at fit time in model.py.
-CAT_CLASS_WEIGHTS = [2, 4, 3]
-XGB_CLASS_WEIGHTS = [2, 1, 2]
-LOG_CLASS_WEIGHTS = [1, 4, 1]
+CAT_CLASS_WEIGHTS = [4, 0, 4]
+XGB_CLASS_WEIGHTS = [0, 4, 0]
+LOG_CLASS_WEIGHTS = [4, 0, 0]
 ```
 
 Final score for class `c` = `sum_m WEIGHTS[m][c] * model_m.predict_proba(x)[c]`,
@@ -73,19 +73,17 @@ changes which class wins — it exists so `predict_proba()`'s output stays a
 valid probability distribution for anything downstream that reads it
 (`run_pipeline.py --diagnostics-output`).
 
-This was found by random search (3000 samples over the 9-parameter space,
-`[0,4]` per entry) optimizing pooled macro F1 on the same 5x5 CV protocol,
-then independently confirmed on a second, disjoint set of CV seeds
-(Section 5) — but it is **not** the matrix that scored highest on macro F1
-in that search. It is a different, explicitly chosen matrix: the one that
-robustly clears 80% Side I accuracy on both seed sets, traded off against
-a real macro F1 cost (0.8809 → 0.8611 / 0.8931 → 0.8683). The
-macro-F1-optimal matrix found by the same search (`cat=[4,0,4],
-xgb=[0,4,0], log=[4,0,0]`, macro F1 0.8940/0.9034) is documented in
-Section 5 as the alternative — it scores higher in aggregate but leaves
-Side I at or below v3's baseline. This module ships the Side-I-priority
-choice deliberately, prioritizing catching the rarest fault class over the
-aggregate metric.
+This is the matrix that scored highest on macro F1 in a 3000-sample random
+search over the 9-parameter space (`[0,4]` per entry), optimizing pooled
+macro F1 on the 5x5 CV protocol, then independently confirmed on a second,
+disjoint set of CV seeds (Section 5). A different matrix (`cat=[2,4,3],
+xgb=[2,1,2], log=[1,4,1]`, "Side-I-priority") from the same search
+robustly clears 80% Side I accuracy on both seed sets, and was shipped
+briefly in its place — but the real held-out score dropped from 0.8552
+(v3, scalar weights) to 0.8006 under it, confirming on genuine held-out
+data that its Side I gain doesn't cover its macro F1 cost. Since macro F1
+is the actual scored metric, this module ships the macro-F1-optimal
+matrix; Section 5 documents both.
 
 Shared with `diagnostics.py`: both `RailEnsemble.predict_proba` and the CV
 self-check call the same `model_mod.combine_probas()` function, so the
@@ -120,21 +118,26 @@ Every number below reuses the exact 5x5 repeated `StratifiedKFold` protocol
 independent confirmation set) already established for v2 and v3, applied
 to the same 49-feature set v3 ships (no feature changes in this version).
 
-| Config | Macro F1 (seeds 0-4) | Macro F1 (seeds 100-104) | Side I acc (0-4 / 100-104) |
-|---|---|---|---|
-| v3 shipped (scalar 2/2/1, uniform per class) | 0.8809 | 0.8931 | 70.0% / 75.7% |
-| macro-F1-optimal matrix (`cat=[4,0,4], xgb=[0,4,0], log=[4,0,0]`) | 0.8940 | 0.9034 | 68.6% / 71.4% |
-| **Side-I-priority matrix (SHIPPED, this version)** | 0.8611 | 0.8683 | **80.0% / 85.7%** |
+| Config | Macro F1 (seeds 0-4) | Macro F1 (seeds 100-104) | Side I acc (0-4 / 100-104) | Real held-out score |
+|---|---|---|---|---|
+| v3 shipped (scalar 2/2/1, uniform per class) | 0.8809 | 0.8931 | 70.0% / 75.7% | 0.8552 |
+| **macro-F1-optimal matrix (SHIPPED, this version)** | **0.8940** | **0.9034** | 68.6% / 71.4% | *(current submission)* |
+| Side-I-priority matrix (shipped briefly, then reverted) | 0.8611 | 0.8683 | 80.0% / 85.7% | 0.8006 |
 
 Both matrices are real, robust findings from the same search + independent-
-seed confirmation, not artifacts — they represent a genuine tradeoff, not
-one dominating the other. The macro-F1-optimal matrix scores higher on the
-aggregate metric but does so by sharpening Normal/Side II, leaving Side I
-at or below v3's baseline. The Side-I-priority matrix gives up 0.02-0.025
-macro F1 (still similar to v3's own baseline) in exchange for robustly
-catching 80%+ of Side I cases on both independent seed sets — a
-deliberate choice to weight minority-class detection over the aggregate
-score, made explicitly rather than by default.
+seed confirmation, not CV artifacts — the CV estimates for both held up on
+a second, disjoint set of seeds. But CV agreement isn't the same as
+real-world agreement: the Side-I-priority matrix's CV cost (~0.02-0.025
+below v3) turned out to *understate* its real cost once submitted — the
+actual held-out drop from v3's 0.8552 was -0.0546, over twice what CV
+predicted. That's a reminder that a 9-parameter search against 272
+training samples carries real overfitting risk even when it clears an
+independent-seed check drawn from the same 272 samples; a genuinely held-
+out score is the only check that can't share that risk. The
+macro-F1-optimal matrix has not yet been scored on held-out data at time
+of writing — it is the better bet on CV evidence (it beats v3's own
+baseline on both seed sets, not just a rebalancing of the same total) but
+carries the same caveat until confirmed.
 
 ### Alternatives tried and rejected, in pursuit of also fixing Side I
 
