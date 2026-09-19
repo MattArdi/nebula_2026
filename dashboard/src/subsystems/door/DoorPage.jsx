@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import Papa from "papaparse";
-import { FileDrop, PrimaryButton, Card, StatCard, LabelBadge } from "../../components/ui.jsx";
+import { FileDrop, PrimaryButton, Card, StatCard, LabelBadge, FileRunPicker } from "../../components/ui.jsx";
 import SegmentTimeline from "../../components/SegmentTimeline.jsx";
 import CycleSignalDetail from "../../components/CycleSignalDetail.jsx";
 import DoorThresholdChart from "../../components/DoorThresholdChart.jsx";
@@ -9,6 +9,7 @@ import { predictDoor } from "../../lib/apiClient.js";
 import { groupDoorCycles, getOperation, parseDoorTimestamp, averageNormalCycleSignal } from "../../lib/signalResample.js";
 import { fetchAsFile } from "../../lib/sampleFiles.js";
 import { DOOR_SAMPLE, DOOR_ANSWERS_URL } from "../../lib/sampleManifest.js";
+import { useFileRuns } from "../../lib/useFileRuns.js";
 
 function formatTimeOfDay(ms) {
   return new Date(ms).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" });
@@ -31,25 +32,12 @@ async function fetchGroundTruth() {
   });
 }
 
-export default function DoorPage({ onSummary }) {
-  const [fileName, setFileName] = useState(null);
-  const [status, setStatus] = useState(null); // { type, message }
-  const [segments, setSegments] = useState(null);
-  const [groundTruth, setGroundTruth] = useState(null); // array aligned by index, or null
-  const [csvText, setCsvText] = useState(null);
-  const [busy, setBusy] = useState(false);
-  const [selectedCycle, setSelectedCycle] = useState(null);
-  const autoLoadedRef = useRef(false);
-
-  function runFile(file) {
-    setFileName(file.name);
-    setStatus(null);
-    setSegments(null);
-    setGroundTruth(null);
-    setCsvText(null);
-    setSelectedCycle(null);
-    setBusy(true);
-
+// Runs the backend pipeline + client-side charting prep for one file and
+// resolves the "run" object useFileRuns stores — doesn't touch React state
+// itself, so the caller can await several of these in a row (one per
+// dropped file) without them racing each other's setState calls.
+function computeRun(file) {
+  return new Promise((resolve, reject) => {
     Papa.parse(file, {
       header: true,
       skipEmptyLines: true,
@@ -70,7 +58,7 @@ export default function DoorPage({ onSummary }) {
           const cycles = groupDoorCycles(results.data);
 
           const alignedByCount = cycles.length === predicted.length;
-          const segs = predicted.map((p, i) => {
+          const segments = predicted.map((p, i) => {
             const chunk = alignedByCount ? cycles[i] : null;
             const diag = diagnostics[i] ?? null;
             return {
@@ -92,34 +80,60 @@ export default function DoorPage({ onSummary }) {
             };
           });
 
-          setSegments(segs);
-          setCsvText(backendResult.csv);
-          const abnormal = segs.filter((s) => s.prediction === "Abnormal resistance").length;
+          const groundTruth = truth && truth.length === segments.length ? truth : null;
+          const abnormal = segments.filter((s) => s.prediction === "Abnormal resistance").length;
+          const correct = groundTruth ? segments.filter((s, i) => s.prediction === groundTruth[i].status).length : null;
 
-          let accuracyMsg = "";
-          if (truth && truth.length === segs.length) {
-            setGroundTruth(truth);
-            const correct = segs.filter((s, i) => s.prediction === truth[i].status).length;
-            accuracyMsg = ` — ${correct}/${segs.length} match Train_Segments_Answer.csv`;
-          }
-
-          setStatus({
-            type: "ok",
-            message: `Found ${segs.length} cycles (${abnormal} abnormal-resistance, ${
-              segs.length - abnormal
-            } normal) from ${results.data.length} rows${accuracyMsg}.`,
+          resolve({
+            id: file.name,
+            fileName: file.name,
+            segments,
+            groundTruth,
+            csvText: backendResult.csv,
+            statusMessage: `Found ${segments.length} cycles (${abnormal} abnormal-resistance, ${
+              segments.length - abnormal
+            } normal) from ${results.data.length} rows${
+              groundTruth ? ` — ${correct}/${segments.length} match Train_Segments_Answer.csv` : ""
+            }.`,
           });
         } catch (err) {
-          setStatus({ type: "error", message: err.message });
-        } finally {
-          setBusy(false);
+          reject(err);
         }
       },
-      error: (err) => {
-        setStatus({ type: "error", message: err.message });
-        setBusy(false);
-      },
+      error: reject,
     });
+  });
+}
+
+export default function DoorPage({ onSummary }) {
+  const { runs, selectedId, setSelectedId, addRun, removeRun } = useFileRuns();
+  const [status, setStatus] = useState(null); // { type, message }
+  const [busy, setBusy] = useState(false);
+  const [selectedCycle, setSelectedCycle] = useState(null);
+  const autoLoadedRef = useRef(false);
+
+  async function runFiles(files) {
+    setStatus(null);
+    setBusy(true);
+    const errors = [];
+    let lastOk = null;
+    for (const file of files) {
+      try {
+        const run = await computeRun(file);
+        addRun(run);
+        lastOk = run;
+      } catch (err) {
+        errors.push(`${file.name}: ${err.message}`);
+      }
+    }
+    setBusy(false);
+    setStatus(
+      errors.length
+        ? { type: "error", message: errors.join("; ") }
+        : lastOk
+          ? { type: "ok", message: lastOk.statusMessage }
+          : null
+    );
   }
 
   useEffect(() => {
@@ -128,7 +142,7 @@ export default function DoorPage({ onSummary }) {
     (async () => {
       try {
         const file = await fetchAsFile(DOOR_SAMPLE.url, DOOR_SAMPLE.name);
-        runFile(file);
+        await runFiles([file]);
       } catch (err) {
         setStatus({ type: "error", message: `Could not load bundled sample data: ${err.message}` });
       }
@@ -136,8 +150,18 @@ export default function DoorPage({ onSummary }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // A file switch invalidates whichever cycle was selected for the detail
+  // view below — it belongs to the previous file's segment array.
+  useEffect(() => {
+    setSelectedCycle(null);
+  }, [selectedId]);
+
+  const selected = runs.find((r) => r.id === selectedId) ?? null;
+  const segments = selected?.segments ?? null;
+  const groundTruth = selected?.groundTruth ?? null;
+
   function handleDownload() {
-    downloadCsvText("door_predictions.csv", csvText);
+    downloadCsvText("door_predictions.csv", selected.csvText);
   }
 
   const abnormalCount = segments ? segments.filter((s) => s.prediction === "Abnormal resistance").length : 0;
@@ -151,7 +175,7 @@ export default function DoorPage({ onSummary }) {
   useEffect(() => {
     if (!segments || !onSummary) return;
     onSummary({
-      fileCount: 1,
+      fileCount: runs.length,
       stats: [
         { label: "Cycles found", value: segments.length },
         { label: "Normal", value: segments.length - abnormalCount, tone: "good" },
@@ -192,9 +216,12 @@ export default function DoorPage({ onSummary }) {
           profile, using the real validated Door pipeline. Opens pre-loaded with the labelled{" "}
           <code className="text-ink-secondary">Train.csv</code> stream, checked against{" "}
           <code className="text-ink-secondary">Train_Segments_Answer.csv</code>. Drop your own{" "}
-          <code className="text-ink-secondary">.csv</code> stream (Train or the real Test.csv) to replace it.
+          <code className="text-ink-secondary">.csv</code> stream(s) (Train or the real Test.csv) to add more —
+          switch between them with the file picker below.
         </p>
       </Card>
+
+      <FileRunPicker runs={runs} selectedId={selectedId} onSelect={setSelectedId} onRemove={removeRun} />
 
       {segments && (
         <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
@@ -239,9 +266,14 @@ export default function DoorPage({ onSummary }) {
         </>
       )}
 
-      <FileDrop onFiles={(files) => runFile(files[0])} accept=".csv" hint="A single continuous-stream CSV, e.g. Train.csv or Test.csv" />
+      <FileDrop
+        onFiles={runFiles}
+        accept=".csv"
+        multiple
+        hint="One or many continuous-stream CSVs, e.g. Train.csv or Test.csv — each adds a file to compare"
+      />
 
-      {fileName && <div className="text-xs text-ink-muted">{fileName}</div>}
+      {selected && <div className="text-xs text-ink-muted">{selected.fileName}</div>}
       {busy && <div className="text-xs text-ink-muted">Processing…</div>}
 
       {status && (

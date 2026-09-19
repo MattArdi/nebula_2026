@@ -1,11 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import Papa from "papaparse";
-import { FileDrop, PrimaryButton, Card, StatCard } from "../../components/ui.jsx";
+import { FileDrop, PrimaryButton, Card, StatCard, FileRunPicker } from "../../components/ui.jsx";
 import AcvCusumChart from "../../components/AcvCusumChart.jsx";
 import { downloadCsvText } from "../../lib/csvExport.js";
 import { predictAcv } from "../../lib/apiClient.js";
 import { fetchAsFile } from "../../lib/sampleFiles.js";
 import { ACV_SAMPLE, ACV_LABELS_URL } from "../../lib/sampleManifest.js";
+import { useFileRuns } from "../../lib/useFileRuns.js";
 
 // Ground truth from Train_Labels.csv — only exists for the 6 labelled
 // Train case files. acv_test_case.xlsx's answer is deliberately
@@ -28,12 +29,23 @@ async function fetchTrainLabels() {
   });
 }
 
+async function computeRun(file) {
+  const result = await predictAcv(file);
+  const row = result.rows[0]; // { file_id, ranked_cars }
+  const rankedCars = row.ranked_cars.split("|");
+  return {
+    id: file.name,
+    fileName: file.name,
+    rankedCars,
+    diagnostics: result.diagnostics ?? null,
+    csvText: result.csv,
+    statusMessage: `Ranked ${rankedCars.length} cars from the real ACV pipeline. Most likely faulty: Car ${rankedCars[0]}.`,
+  };
+}
+
 export default function AcvPage({ onSummary }) {
-  const [fileName, setFileName] = useState(null);
+  const { runs, selectedId, setSelectedId, addRun, removeRun } = useFileRuns();
   const [status, setStatus] = useState(null);
-  const [rankedCars, setRankedCars] = useState(null); // array of car id strings, most-likely-faulty first
-  const [diagnostics, setDiagnostics] = useState(null); // { cars, margin, margin_flagged, margin_reason, trajectories }
-  const [csvText, setCsvText] = useState(null);
   const [trainLabels, setTrainLabels] = useState({});
   const [busy, setBusy] = useState(false);
   const [visibleCarIds, setVisibleCarIds] = useState(null); // Set, null until first loaded (defaults to "all")
@@ -43,30 +55,28 @@ export default function AcvPage({ onSummary }) {
     fetchTrainLabels().then(setTrainLabels);
   }, []);
 
-  async function runFile(file) {
-    setFileName(file.name);
+  async function runFiles(files) {
     setStatus(null);
-    setRankedCars(null);
-    setDiagnostics(null);
-    setCsvText(null);
-    setVisibleCarIds(null);
     setBusy(true);
-    try {
-      const result = await predictAcv(file);
-      const row = result.rows[0]; // { file_id, ranked_cars }
-      const cars = row.ranked_cars.split("|");
-      setRankedCars(cars);
-      setDiagnostics(result.diagnostics ?? null);
-      setCsvText(result.csv);
-      setStatus({
-        type: "ok",
-        message: `Ranked ${cars.length} cars from the real ACV pipeline. Most likely faulty: Car ${cars[0]}.`,
-      });
-    } catch (err) {
-      setStatus({ type: "error", message: err.message });
-    } finally {
-      setBusy(false);
+    const errors = [];
+    let lastOk = null;
+    for (const file of files) {
+      try {
+        const run = await computeRun(file);
+        addRun(run);
+        lastOk = run;
+      } catch (err) {
+        errors.push(`${file.name}: ${err.message}`);
+      }
     }
+    setBusy(false);
+    setStatus(
+      errors.length
+        ? { type: "error", message: errors.join("; ") }
+        : lastOk
+          ? { type: "ok", message: lastOk.statusMessage }
+          : null
+    );
   }
 
   useEffect(() => {
@@ -75,7 +85,7 @@ export default function AcvPage({ onSummary }) {
     (async () => {
       try {
         const file = await fetchAsFile(ACV_SAMPLE.url, ACV_SAMPLE.name);
-        await runFile(file);
+        await runFiles([file]);
       } catch (err) {
         setStatus({ type: "error", message: `Could not load bundled sample data: ${err.message}` });
       }
@@ -83,8 +93,19 @@ export default function AcvPage({ onSummary }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // A file switch invalidates the chart's ticked-car selection — a
+  // different case file can have a different faulty car / trajectory set.
+  useEffect(() => {
+    setVisibleCarIds(null);
+  }, [selectedId]);
+
+  const selected = runs.find((r) => r.id === selectedId) ?? null;
+  const fileName = selected?.fileName ?? null;
+  const rankedCars = selected?.rankedCars ?? null;
+  const diagnostics = selected?.diagnostics ?? null;
+
   function handleDownload() {
-    downloadCsvText("acv_predictions.csv", csvText);
+    downloadCsvText("acv_predictions.csv", selected.csvText);
   }
 
   // Ground truth from Train_Labels.csv — null for any file it doesn't cover.
@@ -110,7 +131,7 @@ export default function AcvPage({ onSummary }) {
   useEffect(() => {
     if (!rankedCars || !onSummary) return;
     onSummary({
-      fileCount: 1,
+      fileCount: runs.length,
       groundTruthCarId,
       stats: [
         { label: "Cars analysed", value: rankedCars.length },
@@ -132,9 +153,12 @@ export default function AcvPage({ onSummary }) {
           Ranks every car in a file by how much its readings deviate from its peers at the same moments, using the
           real validated ACV pipeline. Opens pre-loaded with <code className="text-ink-secondary">acv_case_01.xlsx</code>,
           a labelled Train case checked against <code className="text-ink-secondary">Train_Labels.csv</code>. Drop any
-          other <code className="text-ink-secondary">.xlsx</code> case file (Train or Test) to replace it.
+          other <code className="text-ink-secondary">.xlsx</code> case file(s) (Train or Test) to add more — switch
+          between them with the file picker below.
         </p>
       </Card>
+
+      <FileRunPicker runs={runs} selectedId={selectedId} onSelect={setSelectedId} onRemove={removeRun} />
 
       {rankedCars && (
         <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
@@ -196,7 +220,12 @@ export default function AcvPage({ onSummary }) {
         />
       )}
 
-      <FileDrop onFiles={(files) => runFile(files[0])} accept=".xlsx" hint="A single .xlsx case file, e.g. acv_case_01.xlsx" />
+      <FileDrop
+        onFiles={runFiles}
+        accept=".xlsx"
+        multiple
+        hint="One or many .xlsx case files, e.g. acv_case_01.xlsx — each adds a file to compare"
+      />
 
       {fileName && <div className="text-xs text-ink-muted">{fileName}</div>}
       {busy && <div className="text-xs text-ink-muted">Processing… large files can take a few seconds.</div>}
